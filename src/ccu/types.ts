@@ -146,6 +146,7 @@ export interface ParamDescription {
 export interface CcuConfig {
   host: string;
   port: number;
+  https: boolean;
   user: string;
   password: string;
   timeout: number;

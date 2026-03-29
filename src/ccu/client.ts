@@ -11,7 +11,8 @@ export class CcuClient {
 
   constructor(config: CcuConfig, logger: Logger) {
     this.config = config;
-    this.baseUrl = `http://${config.host}:${config.port}/api/homematic.cgi`;
+    const protocol = config.https ? "https" : "http";
+    this.baseUrl = `${protocol}://${config.host}:${config.port}/api/homematic.cgi`;
     this.logger = logger;
   }
 

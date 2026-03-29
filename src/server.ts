@@ -3,14 +3,19 @@ import type { AppConfig } from "./config.js";
 import type { SessionManager } from "./ccu/session.js";
 import type { RateLimiter } from "./middleware/rate-limiter.js";
 import type { Logger } from "./logger.js";
+import type { DeviceTypeCache } from "./cache/device-type-cache.js";
 import { registerDiscoveryTools } from "./tools/discovery.js";
 import { registerReadTools } from "./tools/read.js";
+import { registerControlTools } from "./tools/control.js";
+import { registerDiagnosticsTools } from "./tools/diagnostics.js";
+import { registerMetaTools } from "./tools/meta.js";
 
 export interface ServerDeps {
   config: AppConfig;
   session: SessionManager;
   rateLimiter: RateLimiter;
   logger: Logger;
+  deviceTypeCache: DeviceTypeCache;
 }
 
 export function createMcpServer(deps: ServerDeps): McpServer {
@@ -31,6 +36,9 @@ export function createMcpServer(deps: ServerDeps): McpServer {
 
   registerDiscoveryTools(server, deps);
   registerReadTools(server, deps);
+  registerControlTools(server, deps);
+  registerDiagnosticsTools(server, deps);
+  registerMetaTools(server, deps);
 
   return server;
 }

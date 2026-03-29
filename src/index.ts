@@ -5,6 +5,7 @@ import { loadConfig } from "./config.js";
 import { createLogger } from "./logger.js";
 import { SessionManager } from "./ccu/session.js";
 import { RateLimiter } from "./middleware/rate-limiter.js";
+import { DeviceTypeCache } from "./cache/device-type-cache.js";
 import { createMcpServer } from "./server.js";
 
 async function main(): Promise<void> {
@@ -28,8 +29,17 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
+  // Initialize device type cache
+  const deviceTypeCache = new DeviceTypeCache(config.cache.dir, config.cache.ttl, logger);
+  await deviceTypeCache.loadFromDisk();
+
+  // Warm cache in background (non-blocking)
+  deviceTypeCache.warm(session, rateLimiter).catch((err) => {
+    logger.error("cache_warm_background_error", { error: (err as Error).message });
+  });
+
   // Create MCP server
-  const server = createMcpServer({ config, session, rateLimiter, logger });
+  const server = createMcpServer({ config, session, rateLimiter, logger, deviceTypeCache });
 
   // Connect transport
   if (config.mcp.transport === "stdio") {
@@ -46,6 +56,7 @@ async function main(): Promise<void> {
   const shutdown = async (signal: string) => {
     logger.info("shutdown", { signal });
     rateLimiter.destroy();
+    await deviceTypeCache.saveToDisk();
     await session.logout();
     session.destroy();
     await server.close();
