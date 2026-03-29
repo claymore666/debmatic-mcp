@@ -38,7 +38,7 @@ export function loadConfig(): AppConfig {
   return {
     ccu: {
       host,
-      port: parseInt(process.env.CCU_PORT || "8181", 10),
+      port: parseInt(process.env.CCU_PORT || "80", 10),
       user: process.env.CCU_USER || "Admin",
       password,
       timeout: 10_000,
