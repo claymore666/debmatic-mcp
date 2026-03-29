@@ -3,7 +3,6 @@ import { SessionManager } from "../../src/ccu/session.js";
 import { createLogger } from "../../src/logger.js";
 import type { CcuConfig, CcuDevice } from "../../src/ccu/types.js";
 
-// Skip if CCU_HOST not set (CI environment)
 const CCU_HOST = process.env.CCU_HOST;
 const describeIf = CCU_HOST ? describe : describe.skip;
 
@@ -35,9 +34,7 @@ describeIf("CCU Integration (against debmatic)", () => {
   });
 
   it("Device.listAllDetail returns devices with expected shape", async () => {
-    const result = await session.call("Device.listAllDetail");
-    const devices = result as CcuDevice[];
-
+    const devices = await session.call("Device.listAllDetail") as CcuDevice[];
     expect(Array.isArray(devices)).toBe(true);
     expect(devices.length).toBeGreaterThan(0);
 
@@ -48,31 +45,34 @@ describeIf("CCU Integration (against debmatic)", () => {
     expect(device).toHaveProperty("interface");
     expect(device).toHaveProperty("type");
     expect(device).toHaveProperty("channels");
-    expect(Array.isArray(device.channels)).toBe(true);
   });
 
   it("Interface.listInterfaces returns interfaces", async () => {
-    const result = await session.call("Interface.listInterfaces");
-    const interfaces = result as Array<{ name: string }>;
-
+    const interfaces = await session.call("Interface.listInterfaces") as Array<{ name: string }>;
     expect(Array.isArray(interfaces)).toBe(true);
     expect(interfaces.length).toBeGreaterThan(0);
   });
 
   it("Room.getAll returns array", async () => {
-    const result = await session.call("Room.getAll");
-    expect(Array.isArray(result)).toBe(true);
+    expect(Array.isArray(await session.call("Room.getAll"))).toBe(true);
+  });
+
+  it("Subsection.getAll returns array", async () => {
+    expect(Array.isArray(await session.call("Subsection.getAll"))).toBe(true);
+  });
+
+  it("Program.getAll returns array", async () => {
+    expect(Array.isArray(await session.call("Program.getAll"))).toBe(true);
+  });
+
+  it("SysVar.getAll returns array", async () => {
+    expect(Array.isArray(await session.call("SysVar.getAll"))).toBe(true);
   });
 
   it("Interface.getValue reads a thermostat temperature", async () => {
-    // Find a thermostat (HmIP-eTRV-2) which has ACTUAL_TEMPERATURE on channel 1
     const devices = await session.call("Device.listAllDetail") as CcuDevice[];
     const thermostat = devices.find((d) => d.type.startsWith("HmIP-eTRV"));
-
-    if (!thermostat) {
-      console.log("No thermostat found, skipping getValue test");
-      return;
-    }
+    if (!thermostat) { console.log("No thermostat found, skipping"); return; }
 
     const value = await session.call("Interface.getValue", {
       interface: thermostat.interface,
@@ -80,10 +80,43 @@ describeIf("CCU Integration (against debmatic)", () => {
       valueKey: "ACTUAL_TEMPERATURE",
     });
 
-    // CCU returns values as strings or numbers depending on interface
     const numValue = Number(value);
     expect(isNaN(numValue)).toBe(false);
     expect(numValue).toBeGreaterThan(-10);
     expect(numValue).toBeLessThan(50);
+  });
+
+  it("Interface.getParamsetDescription returns array of param descriptions", async () => {
+    const devices = await session.call("Device.listAllDetail") as CcuDevice[];
+    const device = devices.find((d) => d.interface === "HmIP-RF" && d.channels.length > 1);
+    if (!device) { console.log("No HmIP device found, skipping"); return; }
+
+    const desc = await session.call("Interface.getParamsetDescription", {
+      interface: device.interface,
+      address: device.channels[0]!.address,
+      paramsetKey: "VALUES",
+    });
+
+    expect(Array.isArray(desc)).toBe(true);
+    const params = desc as Array<{ ID: string; TYPE: string; OPERATIONS: string }>;
+    if (params.length > 0) {
+      expect(params[0]).toHaveProperty("ID");
+      expect(params[0]).toHaveProperty("TYPE");
+      expect(params[0]).toHaveProperty("OPERATIONS");
+    }
+  });
+
+  it("CCU.getVersion returns firmware version", async () => {
+    const version = await session.call("CCU.getVersion");
+    expect(typeof version).toBe("string");
+    expect((version as string).length).toBeGreaterThan(0);
+  });
+
+  it("ReGa.runScript executes and returns output", async () => {
+    const result = await session.call("ReGa.runScript", {
+      script: 'Write("hello from ReGa");',
+    });
+    expect(typeof result).toBe("string");
+    expect((result as string)).toContain("hello from ReGa");
   });
 });

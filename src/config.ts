@@ -38,7 +38,8 @@ export function loadConfig(): AppConfig {
   return {
     ccu: {
       host,
-      port: parseInt(process.env.CCU_PORT || "80", 10),
+      port: parseInt(process.env.CCU_PORT || (process.env.CCU_HTTPS === "true" ? "443" : "80"), 10),
+      https: process.env.CCU_HTTPS === "true",
       user: process.env.CCU_USER || "Admin",
       password,
       timeout: 10_000,

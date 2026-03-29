@@ -4,9 +4,20 @@ import type { ServerDeps } from "../server.js";
 import type { CcuDevice } from "../ccu/types.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import { withRetry } from "../middleware/retry.js";
+import { updateDeviceList } from "../middleware/resolver.js";
 
 export function registerDiscoveryTools(server: McpServer, deps: ServerDeps): void {
   registerListDevices(server, deps);
+  registerListInterfaces(server, deps);
+  registerListRooms(server, deps);
+  registerListFunctions(server, deps);
+  registerListPrograms(server, deps);
+  registerListSystemVariables(server, deps);
+  registerDescribeDeviceType(server, deps);
+}
+
+function toolResult(data: unknown) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
 
 function registerListDevices(server: McpServer, deps: ServerDeps): void {
@@ -39,7 +50,9 @@ function registerListDevices(server: McpServer, deps: ServerDeps): void {
 
         let devices = result as CcuDevice[];
 
-        // Apply room/function filters
+        // Update resolver's device list
+        updateDeviceList(devices);
+
         if (args.room || args.function) {
           const channelIds = new Set<string>();
 
@@ -50,11 +63,8 @@ function registerListDevices(server: McpServer, deps: ServerDeps): void {
               "Room.getAll",
               logger,
             ) as Array<{ id: string; name: string; channelIds: string[] }>;
-
             const room = rooms.find((r) => r.name === args.room);
-            if (room) {
-              for (const id of room.channelIds) channelIds.add(id);
-            }
+            if (room) for (const id of room.channelIds) channelIds.add(id);
           }
 
           if (args.function) {
@@ -64,25 +74,16 @@ function registerListDevices(server: McpServer, deps: ServerDeps): void {
               "Subsection.getAll",
               logger,
             ) as Array<{ id: string; name: string; channelIds: string[] }>;
-
             const func = functions.find((f) => f.name === args.function);
-            if (func) {
-              for (const id of func.channelIds) channelIds.add(id);
-            }
+            if (func) for (const id of func.channelIds) channelIds.add(id);
           }
 
-          if (channelIds.size > 0) {
-            devices = devices.filter((d) =>
-              d.channels.some((ch) => channelIds.has(ch.id)),
-            );
-          } else {
-            devices = [];
-          }
+          devices = channelIds.size > 0
+            ? devices.filter((d) => d.channels.some((ch) => channelIds.has(ch.id)))
+            : [];
         }
 
-        if (args.type) {
-          devices = devices.filter((d) => d.type === args.type);
-        }
+        if (args.type) devices = devices.filter((d) => d.type === args.type);
 
         if (args.name) {
           const needle = args.name.toLowerCase();
@@ -93,18 +94,186 @@ function registerListDevices(server: McpServer, deps: ServerDeps): void {
           );
         }
 
-        const duration = Date.now() - start;
-        logger.info("tool_call", { tool: "list_devices", duration_ms: duration, status: "ok", deviceCount: devices.length });
-
-        return {
-          content: [{ type: "text" as const, text: JSON.stringify(devices, null, 2) }],
-        };
+        logger.info("tool_call", { tool: "list_devices", duration_ms: Date.now() - start, status: "ok", deviceCount: devices.length });
+        return toolResult(devices);
       } catch (err) {
-        const duration = Date.now() - start;
-        logger.info("tool_call", { tool: "list_devices", duration_ms: duration, status: "error" });
+        logger.info("tool_call", { tool: "list_devices", duration_ms: Date.now() - start, status: "error" });
         if (err instanceof CcuError) return err.toMcpError();
         throw err;
       }
+    },
+  );
+}
+
+function registerListInterfaces(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "list_interfaces",
+    {
+      title: "List Interfaces",
+      description: "List available communication interfaces (BidCos-RF, HmIP-RF, VirtualDevices, etc.).",
+    },
+    async () => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+      try {
+        await rateLimiter.acquire();
+        const result = await withRetry(() => session.call("Interface.listInterfaces"), "Interface.listInterfaces", logger);
+        logger.info("tool_call", { tool: "list_interfaces", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult(result);
+      } catch (err) {
+        logger.info("tool_call", { tool: "list_interfaces", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerListRooms(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "list_rooms",
+    {
+      title: "List Rooms",
+      description: "List all rooms with their assigned channel IDs. Use with list_devices to find devices by room.",
+    },
+    async () => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+      try {
+        await rateLimiter.acquire();
+        const result = await withRetry(() => session.call("Room.getAll"), "Room.getAll", logger);
+        logger.info("tool_call", { tool: "list_rooms", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult(result);
+      } catch (err) {
+        logger.info("tool_call", { tool: "list_rooms", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerListFunctions(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "list_functions",
+    {
+      title: "List Functions",
+      description: "List all function groups (Heating, Lighting, etc.) with their assigned channel IDs.",
+    },
+    async () => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+      try {
+        await rateLimiter.acquire();
+        const result = await withRetry(() => session.call("Subsection.getAll"), "Subsection.getAll", logger);
+        logger.info("tool_call", { tool: "list_functions", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult(result);
+      } catch (err) {
+        logger.info("tool_call", { tool: "list_functions", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerListPrograms(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "list_programs",
+    {
+      title: "List Programs",
+      description: "List all automation programs. Use execute_program to trigger them.",
+      inputSchema: {
+        name: z.string().optional().describe("Filter by program name (substring, case-insensitive)"),
+      },
+    },
+    async (args) => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+      try {
+        await rateLimiter.acquire();
+        let programs = await withRetry(() => session.call("Program.getAll"), "Program.getAll", logger) as Array<{ name: string }>;
+
+        if (args.name) {
+          const needle = args.name.toLowerCase();
+          programs = programs.filter((p) => p.name.toLowerCase().includes(needle));
+        }
+
+        logger.info("tool_call", { tool: "list_programs", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult(programs);
+      } catch (err) {
+        logger.info("tool_call", { tool: "list_programs", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerListSystemVariables(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "list_system_variables",
+    {
+      title: "List System Variables",
+      description: "List all system variables with current values and metadata. Use set_system_variable to modify them.",
+      inputSchema: {
+        name: z.string().optional().describe("Filter by variable name (substring, case-insensitive)"),
+      },
+    },
+    async (args) => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+      try {
+        await rateLimiter.acquire();
+        let sysvars = await withRetry(() => session.call("SysVar.getAll"), "SysVar.getAll", logger) as Array<{ name: string }>;
+
+        if (args.name) {
+          const needle = args.name.toLowerCase();
+          sysvars = sysvars.filter((v) => v.name.toLowerCase().includes(needle));
+        }
+
+        logger.info("tool_call", { tool: "list_system_variables", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult(sysvars);
+      } catch (err) {
+        logger.info("tool_call", { tool: "list_system_variables", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerDescribeDeviceType(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "describe_device_type",
+    {
+      title: "Describe Device Type",
+      description:
+        "Get the full channel/datapoint schema for a device type (e.g. 'HmIP-eTRV-2'). " +
+        "Shows all channels, paramsets, datapoint names, types, ranges, and operations. " +
+        "Served from cache (instant). Use list_devices first to find device types.",
+      inputSchema: {
+        deviceType: z.string().describe("Device type name (e.g. 'HmIP-eTRV-2', 'HmIP-SWDO-I'). Get from list_devices."),
+      },
+    },
+    async (args) => {
+      const { logger, deviceTypeCache } = deps;
+      const start = Date.now();
+
+      const cached = deviceTypeCache.get(args.deviceType);
+
+      if (cached) {
+        logger.info("tool_call", { tool: "describe_device_type", duration_ms: Date.now() - start, status: "ok", cached: true });
+        return toolResult({ deviceType: args.deviceType, ...cached });
+      }
+
+      // Cache miss — return what we know
+      logger.info("tool_call", { tool: "describe_device_type", duration_ms: Date.now() - start, status: "ok", cached: false });
+      return toolResult({
+        deviceType: args.deviceType,
+        message: "Device type not in cache. Cache may still be warming. Try again shortly or call list_devices first.",
+        availableTypes: Array.from(deviceTypeCache.getAll() ? Object.keys(deviceTypeCache.getAll()) : []),
+      });
     },
   );
 }

@@ -1,0 +1,232 @@
+import { z } from "zod";
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ServerDeps } from "../server.js";
+import { CcuError } from "../middleware/error-mapper.js";
+import { withRetry } from "../middleware/retry.js";
+import { resolveInterface, resolveType } from "../middleware/resolver.js";
+
+function toolResult(data: unknown) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+}
+
+export function registerControlTools(server: McpServer, deps: ServerDeps): void {
+  registerSetValue(server, deps);
+  registerPutParamset(server, deps);
+  registerSetSystemVariable(server, deps);
+  registerExecuteProgram(server, deps);
+}
+
+function registerSetValue(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "set_value",
+    {
+      title: "Set Value",
+      description:
+        "Set a single datapoint value on a device channel. " +
+        "Only address, valueKey, and value are required — interface and type are auto-resolved. " +
+        "Returns the previous value for undo. Use describe_device_type to find valid valueKeys and ranges.",
+      inputSchema: {
+        address: z.string().describe("Channel address (e.g. '000A1BE9A71F15:1')"),
+        valueKey: z.string().describe("Datapoint name (e.g. 'STATE', 'LEVEL', 'SET_POINT_TEMPERATURE')"),
+        value: z.union([z.string(), z.number(), z.boolean()]).describe("Value to set"),
+        interface: z.string().optional().describe("Interface name override (auto-resolved if omitted)"),
+        type: z.enum(["bool", "int", "double", "string"]).optional().describe("Value type override (auto-resolved if omitted)"),
+      },
+      annotations: {
+        title: "Set Value",
+        destructiveHint: true,
+      },
+    },
+    async (args) => {
+      const { session, rateLimiter, logger, deviceTypeCache } = deps;
+      const start = Date.now();
+
+      try {
+        const iface = args.interface ?? await resolveInterface(args.address, session, rateLimiter, logger);
+        const valueType = args.type ?? resolveType(args.address, args.valueKey, deviceTypeCache) ?? inferType(args.value);
+
+        // Read previous value (best-effort)
+        let previousValue: unknown = null;
+        try {
+          await rateLimiter.acquire();
+          previousValue = await session.call("Interface.getValue", {
+            interface: iface,
+            address: args.address,
+            valueKey: args.valueKey,
+          });
+        } catch {
+          // Pre-read failed — continue with write
+        }
+
+        // Write new value
+        await rateLimiter.acquire();
+        await withRetry(
+          () => session.call("Interface.setValue", {
+            interface: iface,
+            address: args.address,
+            valueKey: args.valueKey,
+            type: valueType,
+            value: args.value,
+          }),
+          "Interface.setValue",
+          logger,
+        );
+
+        logger.info("tool_call", { tool: "set_value", duration_ms: Date.now() - start, status: "ok", address: args.address });
+        return toolResult({
+          address: args.address,
+          valueKey: args.valueKey,
+          previousValue,
+          newValue: args.value,
+          interface: iface,
+          type: valueType,
+        });
+      } catch (err) {
+        logger.info("tool_call", { tool: "set_value", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerPutParamset(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "put_paramset",
+    {
+      title: "Put Paramset",
+      description:
+        "Write multiple parameters at once (e.g. thermostat weekly profile). " +
+        "Interface is auto-resolved from address.",
+      inputSchema: {
+        address: z.string().describe("Channel address"),
+        paramsetKey: z.enum(["VALUES", "MASTER"]).describe("Paramset to write"),
+        set: z.record(z.string(), z.unknown()).describe("Key-value pairs to write"),
+        interface: z.string().optional().describe("Interface name override"),
+      },
+      annotations: {
+        title: "Put Paramset",
+        destructiveHint: true,
+      },
+    },
+    async (args) => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+
+      try {
+        const iface = args.interface ?? await resolveInterface(args.address, session, rateLimiter, logger);
+
+        await rateLimiter.acquire();
+        await withRetry(
+          () => session.call("Interface.putParamset", {
+            interface: iface,
+            address: args.address,
+            paramsetKey: args.paramsetKey,
+            set: args.set,
+          }),
+          "Interface.putParamset",
+          logger,
+        );
+
+        logger.info("tool_call", { tool: "put_paramset", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult({ address: args.address, paramsetKey: args.paramsetKey, written: args.set });
+      } catch (err) {
+        logger.info("tool_call", { tool: "put_paramset", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerSetSystemVariable(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "set_system_variable",
+    {
+      title: "Set System Variable",
+      description:
+        "Set a system variable value. Type is auto-detected — use list_system_variables to see available variables.",
+      inputSchema: {
+        name: z.string().describe("Variable name (exact match)"),
+        value: z.union([z.string(), z.number(), z.boolean()]).describe("Value to set"),
+      },
+      annotations: {
+        title: "Set System Variable",
+        destructiveHint: true,
+      },
+    },
+    async (args) => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+
+      try {
+        // Detect type from value
+        let method: string;
+        if (typeof args.value === "boolean") {
+          method = "SysVar.setBool";
+        } else if (typeof args.value === "number") {
+          method = "SysVar.setFloat";
+        } else {
+          // Could be enum or string — try setFloat first if it looks numeric
+          method = isNaN(Number(args.value)) ? "SysVar.setBool" : "SysVar.setFloat";
+        }
+
+        await rateLimiter.acquire();
+        await withRetry(
+          () => session.call(method, { name: args.name, value: args.value }),
+          method,
+          logger,
+        );
+
+        logger.info("tool_call", { tool: "set_system_variable", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult({ name: args.name, value: args.value, method });
+      } catch (err) {
+        logger.info("tool_call", { tool: "set_system_variable", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerExecuteProgram(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "execute_program",
+    {
+      title: "Execute Program",
+      description:
+        "Trigger an automation program on the CCU. NOT idempotent — will not be auto-retried. " +
+        "Use list_programs to find program IDs.",
+      inputSchema: {
+        id: z.string().describe("Program ID. Get from list_programs."),
+      },
+      annotations: {
+        title: "Execute Program",
+        destructiveHint: true,
+      },
+    },
+    async (args) => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+
+      try {
+        await rateLimiter.acquire();
+        // No retry — Program.execute is not idempotent
+        await session.call("Program.execute", { id: args.id });
+
+        logger.info("tool_call", { tool: "execute_program", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult({ id: args.id, executed: true });
+      } catch (err) {
+        logger.info("tool_call", { tool: "execute_program", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function inferType(value: unknown): string {
+  if (typeof value === "boolean") return "bool";
+  if (typeof value === "number") return Number.isInteger(value) ? "int" : "double";
+  return "string";
+}

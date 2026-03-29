@@ -1,0 +1,120 @@
+import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import type { ServerDeps } from "../server.js";
+import { CcuError } from "../middleware/error-mapper.js";
+import { withRetry } from "../middleware/retry.js";
+
+function toolResult(data: unknown) {
+  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
+}
+
+export function registerDiagnosticsTools(server: McpServer, deps: ServerDeps): void {
+  registerGetServiceMessages(server, deps);
+  registerGetSystemInfo(server, deps);
+}
+
+function registerGetServiceMessages(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "get_service_messages",
+    {
+      title: "Get Service Messages",
+      description:
+        "Get all active service messages (low battery, unreachable, etc.) with device details and timestamps.",
+    },
+    async () => {
+      const { session, rateLimiter, logger } = deps;
+      const start = Date.now();
+
+      try {
+        const script = `
+          object svcs = dom.GetObject(ID_SERVICES);
+          boolean first = true;
+          Write("[");
+          if (svcs) {
+            string sId;
+            foreach(sId, svcs.EnumIDs()) {
+              object svc = dom.GetObject(sId);
+              if (svc && svc.IsTypeOf(OT_ALARMDP) && svc.AlState() == asOncoming) {
+                if (!first) { Write(","); } first = false;
+                object ch = dom.GetObject(svc.Channel());
+                string chName = "";
+                string chAddr = "";
+                if (ch) { chName = ch.Name(); chAddr = ch.Address(); }
+                Write('{"id":"' # sId # '"');
+                Write(',"name":"' # svc.Name() # '"');
+                Write(',"address":"' # chAddr # '"');
+                Write(',"channelName":"' # chName # '"');
+                Write(',"timestamp":"' # svc.AlOccurrenceTime() # '"');
+                Write('}');
+              }
+            }
+          }
+          Write("]");
+        `;
+
+        await rateLimiter.acquire();
+        const result = await withRetry(
+          () => session.call("ReGa.runScript", { script }, deps.config.ccu.scriptTimeout),
+          "ReGa.runScript",
+          logger,
+        );
+
+        const messages = typeof result === "string" ? tryParseJson(result) : result;
+
+        logger.info("tool_call", { tool: "get_service_messages", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult(messages);
+      } catch (err) {
+        logger.info("tool_call", { tool: "get_service_messages", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function registerGetSystemInfo(server: McpServer, deps: ServerDeps): void {
+  server.registerTool(
+    "get_system_info",
+    {
+      title: "Get System Info",
+      description: "Get CCU system information: firmware version, serial number, addresses.",
+    },
+    async () => {
+      const { session, rateLimiter, logger, deviceTypeCache } = deps;
+      const start = Date.now();
+
+      try {
+        const results: Record<string, unknown> = { serverVersion: "0.1.0" };
+
+        const calls: Array<{ key: string; method: string }> = [
+          { key: "version", method: "CCU.getVersion" },
+          { key: "serial", method: "CCU.getSerial" },
+          { key: "address", method: "CCU.getAddress" },
+          { key: "hmipAddress", method: "CCU.getHmIPAddress" },
+        ];
+
+        for (const { key, method } of calls) {
+          try {
+            await rateLimiter.acquire();
+            results[key] = await session.call(method);
+          } catch {
+            results[key] = null;
+          }
+        }
+
+        results.cacheTypes = deviceTypeCache.size();
+        results.cacheWarming = deviceTypeCache.isWarming();
+
+        logger.info("tool_call", { tool: "get_system_info", duration_ms: Date.now() - start, status: "ok" });
+        return toolResult(results);
+      } catch (err) {
+        logger.info("tool_call", { tool: "get_system_info", duration_ms: Date.now() - start, status: "error" });
+        if (err instanceof CcuError) return err.toMcpError();
+        throw err;
+      }
+    },
+  );
+}
+
+function tryParseJson(text: string): unknown {
+  try { return JSON.parse(text); } catch { return text; }
+}
