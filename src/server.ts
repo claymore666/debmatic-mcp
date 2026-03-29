@@ -3,6 +3,8 @@ import type { AppConfig } from "./config.js";
 import type { SessionManager } from "./ccu/session.js";
 import type { RateLimiter } from "./middleware/rate-limiter.js";
 import type { Logger } from "./logger.js";
+import { registerDiscoveryTools } from "./tools/discovery.js";
+import { registerReadTools } from "./tools/read.js";
 
 export interface ServerDeps {
   config: AppConfig;
@@ -27,12 +29,8 @@ export function createMcpServer(deps: ServerDeps): McpServer {
     },
   );
 
-  registerTools(server, deps);
+  registerDiscoveryTools(server, deps);
+  registerReadTools(server, deps);
 
   return server;
-}
-
-function registerTools(server: McpServer, deps: ServerDeps): void {
-  // Tools will be registered here as they are implemented
-  // Each tool module exports a register function that takes (server, deps)
 }
