@@ -1,3 +1,4 @@
+import { Agent, fetch as undiciFetch } from "undici";
 import type { CcuConfig, CcuRpcRequest, CcuRpcResponse } from "./types.js";
 import { CcuError, mapCcuError, mapNetworkError } from "../middleware/error-mapper.js";
 import type { Logger } from "../logger.js";
@@ -8,12 +9,21 @@ export class CcuClient {
   private readonly baseUrl: string;
   private readonly config: CcuConfig;
   private readonly logger: Logger;
+  private readonly dispatcher: Agent | undefined;
 
   constructor(config: CcuConfig, logger: Logger) {
     this.config = config;
     const protocol = config.https ? "https" : "http";
     this.baseUrl = `${protocol}://${config.host}:${config.port}/api/homematic.cgi`;
     this.logger = logger;
+
+    if (config.https) {
+      this.dispatcher = new Agent({
+        connect: { rejectUnauthorized: false },
+        pipelining: 0,
+        keepAliveTimeout: 1000,
+      });
+    }
   }
 
   async call(method: string, params: Record<string, unknown>, timeout?: number): Promise<unknown> {
@@ -31,11 +41,12 @@ export class CcuClient {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), effectiveTimeout);
 
-      const httpResponse = await fetch(this.baseUrl, {
+      const httpResponse = await undiciFetch(this.baseUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(request),
         signal: controller.signal,
+        dispatcher: this.dispatcher,
       });
 
       clearTimeout(timer);
