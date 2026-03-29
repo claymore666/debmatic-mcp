@@ -1,0 +1,24 @@
+node_modules/
+dist/
+*.js
+*.js.map
+*.d.ts
+!jest.config.js
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Cache (runtime, not committed)
+/data/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
