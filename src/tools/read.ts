@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerDeps } from "../server.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import { withRetry } from "../middleware/retry.js";
-import { toolResult, tryParseJson, escapeHmScript } from "../utils.js";
+import { toolResult, tryParseJson, escapeHmScript, parseValue, parseValues } from "../utils.js";
 
 export function registerReadTools(server: McpServer, deps: ServerDeps): void {
   registerGetValue(server, deps);
@@ -45,7 +45,7 @@ function registerGetValue(server: McpServer, deps: ServerDeps): void {
         );
 
         logger.info("tool_call", { tool: "get_value", duration_ms: Date.now() - start, status: "ok", address: args.address });
-        return toolResult({ address: args.address, valueKey: args.valueKey, value });
+        return toolResult({ address: args.address, valueKey: args.valueKey, value: parseValue(value) });
       } catch (err) {
         logger.info("tool_call", { tool: "get_value", duration_ms: Date.now() - start, status: "error" });
         if (err instanceof CcuError) return err.toMcpError();
@@ -208,7 +208,11 @@ function registerGetParamset(server: McpServer, deps: ServerDeps): void {
         );
 
         logger.info("tool_call", { tool: "get_paramset", duration_ms: Date.now() - start, status: "ok" });
-        return toolResult({ address: args.address, paramsetKey: args.paramsetKey, params: result });
+        // Parse values to native types if result is a flat object
+        const params = (typeof result === "object" && result !== null && !Array.isArray(result))
+          ? parseValues(result as Record<string, unknown>)
+          : result;
+        return toolResult({ address: args.address, paramsetKey: args.paramsetKey, params });
       } catch (err) {
         logger.info("tool_call", { tool: "get_paramset", duration_ms: Date.now() - start, status: "error" });
         if (err instanceof CcuError) return err.toMcpError();

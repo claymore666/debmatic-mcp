@@ -20,3 +20,29 @@ export function tryParseJson(text: string): unknown {
 
 /** Server version constant — single source of truth. */
 export const VERSION = "0.1.0";
+
+/**
+ * Parse a CCU string value to a native JS type.
+ * "19.000000" → 19, "true" → true, "false" → false, "" → null, else string.
+ */
+export function parseValue(val: unknown): unknown {
+  if (val === null || val === undefined) return null;
+  const s = String(val);
+  if (s === "") return null;
+  if (s === "true") return true;
+  if (s === "false") return false;
+  const n = Number(s);
+  if (!isNaN(n) && s.trim() !== "") return n;
+  return s;
+}
+
+/**
+ * Parse all values in a flat key-value object (e.g. paramset or datapoints).
+ */
+export function parseValues(obj: Record<string, unknown>): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    result[k] = parseValue(v);
+  }
+  return result;
+}

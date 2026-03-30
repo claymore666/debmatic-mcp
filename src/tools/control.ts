@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerDeps } from "../server.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import { withRetry } from "../middleware/retry.js";
-import { toolResult } from "../utils.js";
+import { toolResult, parseValue } from "../utils.js";
 
 export function registerControlTools(server: McpServer, deps: ServerDeps): void {
   registerSetValue(server, deps);
@@ -72,7 +72,7 @@ function registerSetValue(server: McpServer, deps: ServerDeps): void {
         return toolResult({
           address: args.address,
           valueKey: args.valueKey,
-          previousValue,
+          previousValue: parseValue(previousValue),
           newValue: args.value,
           interface: iface,
           type: valueType,

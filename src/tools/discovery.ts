@@ -93,9 +93,13 @@ function registerListDevices(server: McpServer, deps: ServerDeps): void {
         const hasFilter = args.room || args.function || args.type || args.name;
 
         // Compact format when unfiltered (summary only), full details when filtered
+        // Hide 50-channel virtual receivers (HM-RCV-50, HmIP-RCV-50) in compact mode
+        const HIDDEN_TYPES = new Set(["HM-RCV-50", "HmIP-RCV-50"]);
         const output = hasFilter
           ? devices
-          : devices.map((d) => ({
+          : devices
+            .filter((d) => !HIDDEN_TYPES.has(d.type))
+            .map((d) => ({
               id: d.id,
               name: d.name,
               address: d.address,
