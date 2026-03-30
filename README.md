@@ -78,7 +78,7 @@ docker run -d \
 **2. Get the auth token.** The server generates a random bearer token on first startup and saves it inside the container's data volume. You need this token to authenticate your MCP client. Grab it with:
 
 ```bash
-docker exec debmatic-mcp cat /data/.env
+docker exec debmatic-mcp grep MCP_AUTH_TOKEN /data/.env
 ```
 
 This prints something like `MCP_AUTH_TOKEN=e96suzi1iG0H-GPif6K2...`. The part after `=` is your token.
@@ -101,7 +101,7 @@ This prints something like `MCP_AUTH_TOKEN=e96suzi1iG0H-GPif6K2...`. The part af
 To inject the token automatically (requires `jq`):
 
 ```bash
-TOKEN=$(docker exec debmatic-mcp cat /data/.env | cut -d= -f2)
+TOKEN=$(docker exec debmatic-mcp grep MCP_AUTH_TOKEN /data/.env | cut -d= -f2)
 jq --arg t "$TOKEN" '.mcpServers.debmatic.headers.Authorization = "Bearer " + $t' .mcp.json > .mcp.json.tmp && mv .mcp.json.tmp .mcp.json
 ```
 
