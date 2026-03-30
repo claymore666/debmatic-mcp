@@ -9,6 +9,8 @@ import { registerReadTools } from "./tools/read.js";
 import { registerControlTools } from "./tools/control.js";
 import { registerDiagnosticsTools } from "./tools/diagnostics.js";
 import { registerMetaTools } from "./tools/meta.js";
+import { registerResources } from "./resources/registry.js";
+import { registerPrompts } from "./prompts/registry.js";
 
 export interface ServerDeps {
   config: AppConfig;
@@ -39,6 +41,8 @@ export function createMcpServer(deps: ServerDeps): McpServer {
   registerControlTools(server, deps);
   registerDiagnosticsTools(server, deps);
   registerMetaTools(server, deps);
+  registerResources(server, deps);
+  registerPrompts(server);
 
   return server;
 }
