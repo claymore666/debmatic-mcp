@@ -32,12 +32,32 @@ function registerGetServiceMessages(server: McpServer, deps: ServerDeps): void {
               object svc = dom.GetObject(sId);
               if (svc && svc.IsTypeOf(OT_ALARMDP) && svc.AlState() == asOncoming) {
                 if (!first) { Write(","); } first = false;
-                object ch = dom.GetObject(svc.Channel());
-                string chName = "";
+                ! Parse address from alarm name: AL-<address>.<dpName>
+                string alName = svc.Name();
                 string chAddr = "";
-                if (ch) { chName = ch.Name(); chAddr = ch.Address(); }
+                string dpName = "";
+                string chName = "";
+                integer alPos = alName.Find("AL-");
+                if (alPos >= 0) {
+                  string rest = alName.Substr(3, alName.Length());
+                  integer dotPos = rest.Find(".");
+                  if (dotPos > 0) {
+                    chAddr = rest.Substr(0, dotPos);
+                    dpName = rest.Substr(dotPos + 1, rest.Length());
+                  }
+                }
+                ! Look up channel by address
+                if (chAddr != "") {
+                  string cId;
+                  foreach(cId, dom.GetObject(ID_CHANNELS).EnumUsedIDs()) {
+                    object c = dom.GetObject(cId);
+                    if (c && c.Address() == chAddr) {
+                      chName = c.Name();
+                    }
+                  }
+                }
                 Write('{"id":"' # sId # '"');
-                Write(',"name":"' # svc.Name() # '"');
+                Write(',"type":"' # dpName # '"');
                 Write(',"address":"' # chAddr # '"');
                 Write(',"channelName":"' # chName # '"');
                 Write(',"timestamp":"' # svc.AlOccurrenceTime() # '"');

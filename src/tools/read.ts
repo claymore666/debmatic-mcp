@@ -78,8 +78,9 @@ function registerGetValues(server: McpServer, deps: ServerDeps): void {
         let script: string;
 
         if (args.channels && args.channels.length > 0) {
-          const addrList = args.channels.map((a) => `"${escapeHmScript(a)}"`).join(",");
-          script = buildGetValuesScript(`{${addrList}}`, "addresses");
+          // Comma-delimited with sentinel commas for exact matching via Find()
+          const addrList = "," + args.channels.map((a) => escapeHmScript(a)).join(",") + ",";
+          script = buildGetValuesScript(`"${addrList}"`, "addresses");
         } else if (args.room) {
           script = buildGetValuesScript(`"${escapeHmScript(args.room)}"`, "room");
         } else if (args.function) {
@@ -132,17 +133,18 @@ const WRITE_CHANNEL_DPS = `
 
 export function buildGetValuesScript(filter: string, filterType: "addresses" | "room" | "function"): string {
   if (filterType === "addresses") {
-    // Address-based: iterate all channels and match by address
+    // Address-based: single pass over channels, match via string Find
+    // HM Script can't do nested foreach over large collections
     return `
-      string addresses = ${filter};
+      string targetAddrs = ${filter};
       boolean first = true;
       Write("[");
-      string addr;
-      foreach(addr, addresses) {
-        string chId;
-        foreach(chId, dom.GetObject(ID_CHANNELS).EnumUsedIDs()) {
-          object ch = dom.GetObject(chId);
-          if (ch && ch.Address() == addr) {
+      string chId;
+      foreach(chId, dom.GetObject(ID_CHANNELS).EnumUsedIDs()) {
+        object ch = dom.GetObject(chId);
+        if (ch) {
+          string needle = "," # ch.Address() # ",";
+          if (targetAddrs.Find(needle) >= 0) {
             ${WRITE_CHANNEL_DPS}
           }
         }
