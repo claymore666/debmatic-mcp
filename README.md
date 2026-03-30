@@ -24,6 +24,14 @@ The MCP server handles device discovery, type resolution, session management, an
 - The CCU's admin username and password (the same credentials you use to log into the WebUI)
 - Node.js 22+ (for running from source or stdio mode) or Docker
 
+## Quick start
+
+```bash
+npx debmatic-mcp --stdio
+```
+
+That's it — downloads and runs the server. Set `CCU_HOST` and `CCU_PASSWORD` as environment variables, or configure them in your MCP client as shown below.
+
 ## Installation
 
 There are two ways to run this: **stdio** (the server runs as a subprocess of your MCP client) or **HTTP** (the server runs standalone in Docker and clients connect over the network). Pick one.
