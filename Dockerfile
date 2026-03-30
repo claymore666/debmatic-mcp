@@ -14,6 +14,6 @@ COPY --from=builder /app/dist/ ./dist/
 VOLUME /data
 ENV CACHE_DIR=/data
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
-  CMD wget -qO- http://localhost:3000/health | grep -q '"status":"healthy"' || exit 1
+HEALTHCHECK --interval=30s --timeout=5s --start-period=15s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health | grep -q '"status"' || exit 1
 CMD ["node", "dist/index.js"]

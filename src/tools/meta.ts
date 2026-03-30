@@ -2,10 +2,7 @@ import { z } from "zod";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerDeps } from "../server.js";
 import { CcuError } from "../middleware/error-mapper.js";
-
-function toolResult(data: unknown) {
-  return { content: [{ type: "text" as const, text: typeof data === "string" ? data : JSON.stringify(data, null, 2) }] };
-}
+import { toolResult } from "../utils.js";
 
 export function registerMetaTools(server: McpServer, deps: ServerDeps): void {
   registerHelp(server, deps);

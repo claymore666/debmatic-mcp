@@ -3,6 +3,7 @@ import { createMcpServer, type ServerDeps } from "../../src/server.js";
 import { Logger } from "../../src/logger.js";
 import { RateLimiter } from "../../src/middleware/rate-limiter.js";
 import { DeviceTypeCache } from "../../src/cache/device-type-cache.js";
+import { Resolver } from "../../src/middleware/resolver.js";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 export function createMockDeps(overrides?: {
@@ -29,6 +30,7 @@ export function createMockDeps(overrides?: {
     rateLimiter,
     logger: new Logger("error"),
     deviceTypeCache: new DeviceTypeCache("/tmp/nonexistent-test", 86400, new Logger("error")),
+    resolver: new Resolver(),
   };
 }
 

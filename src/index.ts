@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { createServer } from "node:http";
+import { timingSafeEqual } from "node:crypto";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { loadConfig } from "./config.js";
@@ -8,6 +9,7 @@ import { createLogger } from "./logger.js";
 import { SessionManager } from "./ccu/session.js";
 import { RateLimiter } from "./middleware/rate-limiter.js";
 import { DeviceTypeCache } from "./cache/device-type-cache.js";
+import { Resolver } from "./middleware/resolver.js";
 import { ResourcePoller } from "./resources/poller.js";
 import { resolveAuthToken } from "./auth/token.js";
 import { handleHealthRequest } from "./health/handler.js";
@@ -42,8 +44,9 @@ async function main(): Promise<void> {
     logger.error("cache_warm_background_error", { error: (err as Error).message });
   });
 
-  // Create MCP server
-  const mcpServer = createMcpServer({ config, session, rateLimiter, logger, deviceTypeCache });
+  // Create resolver and MCP server
+  const resolver = new Resolver();
+  const mcpServer = createMcpServer({ config, session, rateLimiter, logger, deviceTypeCache, resolver });
 
   // Start resource poller
   const poller = new ResourcePoller(mcpServer.server, session, rateLimiter, logger, config.resourcePollInterval);
@@ -67,9 +70,13 @@ async function main(): Promise<void> {
         return;
       }
 
-      // Auth check for MCP endpoints
+      // Auth check for MCP endpoints (timing-safe comparison)
       const authHeader = req.headers.authorization;
-      if (!authHeader || authHeader !== `Bearer ${authToken}`) {
+      const expected = `Bearer ${authToken}`;
+      const headerValid = authHeader !== undefined
+        && authHeader.length === expected.length
+        && timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+      if (!headerValid) {
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Unauthorized" }));
         return;
@@ -87,15 +94,27 @@ async function main(): Promise<void> {
     });
   }
 
-  // Graceful shutdown
+  // Graceful shutdown with re-entrancy guard
+  let shuttingDown = false;
   const shutdown = async (signal: string) => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     logger.info("shutdown", { signal });
-    poller.stop();
-    rateLimiter.destroy();
-    await deviceTypeCache.saveToDisk();
-    await session.logout();
-    session.destroy();
-    await mcpServer.close();
+
+    // Safety net: force exit after 10s if graceful shutdown hangs
+    const forceExit = setTimeout(() => process.exit(1), 10_000);
+    forceExit.unref();
+
+    try {
+      poller.stop();
+      rateLimiter.destroy();
+      await deviceTypeCache.saveToDisk();
+      await session.logout();
+      session.destroy();
+      await mcpServer.close();
+    } catch (err) {
+      logger.error("shutdown_error", { error: (err as Error).message });
+    }
     process.exit(0);
   };
 

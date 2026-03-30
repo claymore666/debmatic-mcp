@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { inferType } from "../../src/tools/control.js";
 import { createTestServer, callTool, parseToolResult, cleanupDeps } from "./_helpers.js";
-import { updateDeviceList, clearResolver } from "../../src/middleware/resolver.js";
 
 describe("inferType", () => {
   it("returns 'bool' for booleans", () => {
@@ -27,14 +26,6 @@ describe("inferType", () => {
 });
 
 describe("set_value handler", () => {
-  beforeEach(() => {
-    clearResolver();
-    updateDeviceList([
-      { id: "1", name: "Dev", address: "ABC123", interface: "HmIP-RF", type: "HmIP-eTRV-2",
-        operateGroupOnly: "false", isReady: "true", channels: [] },
-    ] as any);
-  });
-
   it("reads previous value before writing", async () => {
     const { server, deps } = createTestServer({
       sessionCall: vi.fn()

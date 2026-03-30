@@ -8,6 +8,27 @@ import { CACHE_VERSION } from "./types.js";
 
 const CACHE_FILENAME = "device-type-cache.json";
 
+type RawParamDesc = {
+  ID: string; TYPE: string; OPERATIONS: string;
+  MIN?: string; MAX?: string; DEFAULT?: string; UNIT?: string; VALUE_LIST?: string[];
+};
+
+function parseParamDescriptions(descArray: RawParamDesc[]): Record<string, CachedParamDescription> {
+  const params: Record<string, CachedParamDescription> = {};
+  for (const p of descArray) {
+    params[p.ID] = {
+      type: p.TYPE,
+      operations: parseInt(p.OPERATIONS, 10),
+      ...(p.MIN !== undefined && { min: Number(p.MIN) }),
+      ...(p.MAX !== undefined && { max: Number(p.MAX) }),
+      ...(p.DEFAULT !== undefined && { default: p.DEFAULT }),
+      ...(p.UNIT && { unit: p.UNIT }),
+      ...(p.VALUE_LIST && { valueList: p.VALUE_LIST }),
+    };
+  }
+  return params;
+}
+
 export class DeviceTypeCache {
   private cache = new Map<string, CachedDeviceType>();
   private readonly cacheDir: string;
@@ -152,30 +173,7 @@ export class DeviceTypeCache {
                   paramsetKey,
                 });
 
-                // CCU returns an array of param descriptions
-                const params: Record<string, CachedParamDescription> = {};
-                const descArray = desc as Array<{
-                  ID: string;
-                  TYPE: string;
-                  OPERATIONS: string;
-                  MIN?: string;
-                  MAX?: string;
-                  DEFAULT?: string;
-                  UNIT?: string;
-                  VALUE_LIST?: string[];
-                }>;
-
-                for (const p of descArray) {
-                  params[p.ID] = {
-                    type: p.TYPE,
-                    operations: parseInt(p.OPERATIONS, 10),
-                    ...(p.MIN !== undefined && { min: Number(p.MIN) }),
-                    ...(p.MAX !== undefined && { max: Number(p.MAX) }),
-                    ...(p.DEFAULT !== undefined && { default: p.DEFAULT }),
-                    ...(p.UNIT && { unit: p.UNIT }),
-                    ...(p.VALUE_LIST && { valueList: p.VALUE_LIST }),
-                  };
-                }
+                const params = parseParamDescriptions(desc as RawParamDesc[]);
 
                 if (Object.keys(params).length > 0) {
                   paramsets[paramsetKey] = params;
@@ -236,23 +234,7 @@ export class DeviceTypeCache {
             paramsetKey,
           });
 
-          const params: Record<string, CachedParamDescription> = {};
-          const descArray = desc as Array<{
-            ID: string; TYPE: string; OPERATIONS: string;
-            MIN?: string; MAX?: string; DEFAULT?: string; UNIT?: string; VALUE_LIST?: string[];
-          }>;
-
-          for (const p of descArray) {
-            params[p.ID] = {
-              type: p.TYPE,
-              operations: parseInt(p.OPERATIONS, 10),
-              ...(p.MIN !== undefined && { min: Number(p.MIN) }),
-              ...(p.MAX !== undefined && { max: Number(p.MAX) }),
-              ...(p.DEFAULT !== undefined && { default: p.DEFAULT }),
-              ...(p.UNIT && { unit: p.UNIT }),
-              ...(p.VALUE_LIST && { valueList: p.VALUE_LIST }),
-            };
-          }
+          const params = parseParamDescriptions(desc as RawParamDesc[]);
 
           if (Object.keys(params).length > 0) {
             paramsets[paramsetKey] = params;

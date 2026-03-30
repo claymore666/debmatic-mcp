@@ -35,10 +35,16 @@ export function loadConfig(): AppConfig {
   if (args.includes("--stdio")) transport = "stdio";
   if (args.includes("--http")) transport = "http";
 
+  const parseIntEnv = (name: string, fallback: string): number => {
+    const val = parseInt(process.env[name] || fallback, 10);
+    if (isNaN(val)) throw new Error(`${name} must be a number, got: "${process.env[name]}"`);
+    return val;
+  };
+
   return {
     ccu: {
       host,
-      port: parseInt(process.env.CCU_PORT || (process.env.CCU_HTTPS === "true" ? "443" : "80"), 10),
+      port: parseIntEnv("CCU_PORT", process.env.CCU_HTTPS === "true" ? "443" : "80"),
       https: process.env.CCU_HTTPS === "true",
       user: process.env.CCU_USER || "Admin",
       password,
@@ -47,17 +53,17 @@ export function loadConfig(): AppConfig {
     },
     mcp: {
       transport,
-      port: parseInt(process.env.MCP_PORT || "3000", 10),
+      port: parseIntEnv("MCP_PORT", "3000"),
       authToken: process.env.MCP_AUTH_TOKEN,
     },
     cache: {
       dir: process.env.CACHE_DIR || "/data",
-      ttl: parseInt(process.env.CACHE_TTL || "86400", 10),
+      ttl: parseIntEnv("CACHE_TTL", "86400"),
     },
     rateLimiter: {
-      burst: parseInt(process.env.CCU_RATE_LIMIT_BURST || "20", 10),
-      rate: parseInt(process.env.CCU_RATE_LIMIT_RATE || "10", 10),
+      burst: parseIntEnv("CCU_RATE_LIMIT_BURST", "20"),
+      rate: parseIntEnv("CCU_RATE_LIMIT_RATE", "10"),
     },
-    resourcePollInterval: parseInt(process.env.RESOURCE_POLL_INTERVAL || "60", 10),
+    resourcePollInterval: parseIntEnv("RESOURCE_POLL_INTERVAL", "60"),
   };
 }

@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { createTestServer, callTool, parseToolResult, cleanupDeps } from "./_helpers.js";
-import { clearResolver } from "../../src/middleware/resolver.js";
 
 const mockDevices = [
   { id: "1", name: "Thermostat Wohnzimmer", address: "AAA", interface: "HmIP-RF", type: "HmIP-eTRV-2",
@@ -30,8 +29,6 @@ const mockFunctions = [
 ];
 
 describe("list_devices handler", () => {
-  beforeEach(() => { clearResolver(); });
-
   function createServer() {
     return createTestServer({
       sessionCall: vi.fn().mockImplementation(async (method: string) => {

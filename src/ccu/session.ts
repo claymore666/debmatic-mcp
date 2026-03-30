@@ -101,6 +101,7 @@ export class SessionManager {
         }
       }
     }, SESSION_RENEW_INTERVAL);
+    this.renewTimer.unref();
   }
 
   private stopRenewal(): void {

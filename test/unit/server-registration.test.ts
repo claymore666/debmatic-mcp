@@ -3,6 +3,7 @@ import { createMcpServer } from "../../src/server.js";
 import { Logger } from "../../src/logger.js";
 import { RateLimiter } from "../../src/middleware/rate-limiter.js";
 import { DeviceTypeCache } from "../../src/cache/device-type-cache.js";
+import { Resolver } from "../../src/middleware/resolver.js";
 
 // Minimal mock deps — we're testing that registration doesn't throw, not calling tools
 function createMockDeps() {
@@ -26,6 +27,7 @@ function createMockDeps() {
     rateLimiter: new RateLimiter(20, 10),
     logger: new Logger("error"),
     deviceTypeCache: new DeviceTypeCache("/tmp", 86400, new Logger("error")),
+    resolver: new Resolver(),
   };
 }
 

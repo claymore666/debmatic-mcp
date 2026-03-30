@@ -3,11 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerDeps } from "../server.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import { withRetry } from "../middleware/retry.js";
-import { resolveInterface } from "../middleware/resolver.js";
-
-function toolResult(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
-}
+import { toolResult, tryParseJson, escapeHmScript } from "../utils.js";
 
 export function registerReadTools(server: McpServer, deps: ServerDeps): void {
   registerGetValue(server, deps);
@@ -35,7 +31,7 @@ function registerGetValue(server: McpServer, deps: ServerDeps): void {
       const start = Date.now();
 
       try {
-        const iface = args.interface ?? await resolveInterface(args.address, session, rateLimiter, logger);
+        const iface = args.interface ?? await deps.resolver.resolveInterface(args.address, session, rateLimiter, logger);
 
         await rateLimiter.acquire();
         const value = await withRetry(
@@ -82,12 +78,12 @@ function registerGetValues(server: McpServer, deps: ServerDeps): void {
         let script: string;
 
         if (args.channels && args.channels.length > 0) {
-          const addrList = args.channels.map((a) => `"${a}"`).join(",");
+          const addrList = args.channels.map((a) => `"${escapeHmScript(a)}"`).join(",");
           script = buildGetValuesScript(`{${addrList}}`, "addresses");
         } else if (args.room) {
-          script = buildGetValuesScript(`"${args.room}"`, "room");
+          script = buildGetValuesScript(`"${escapeHmScript(args.room)}"`, "room");
         } else if (args.function) {
-          script = buildGetValuesScript(`"${args.function}"`, "function");
+          script = buildGetValuesScript(`"${escapeHmScript(args.function)}"`, "function");
         } else {
           return {
             isError: true,
@@ -135,7 +131,10 @@ export function buildGetValuesScript(filter: string, filterType: "addresses" | "
             object dp = dom.GetObject(dpId);
             if (dp) {
               if (!firstDp) { Write(","); } firstDp = false;
-              Write('"' # dp.HssType() # '":' # dp.Value());
+              integer vt = dp.ValueType();
+              Write('"' # dp.HssType() # '":');
+              if ((vt == 4) || (vt == 20)) { Write('"' # dp.Value() # '"'); }
+              else { Write(dp.Value()); }
             }
           }
           Write("}}");
@@ -166,7 +165,10 @@ export function buildGetValuesScript(filter: string, filterType: "addresses" | "
             object dp = dom.GetObject(dpId);
             if (dp) {
               if (!firstDp) { Write(","); } firstDp = false;
-              Write('"' # dp.HssType() # '":' # dp.Value());
+              integer vt = dp.ValueType();
+              Write('"' # dp.HssType() # '":');
+              if ((vt == 4) || (vt == 20)) { Write('"' # dp.Value() # '"'); }
+              else { Write(dp.Value()); }
             }
           }
           Write("}}");
@@ -196,7 +198,7 @@ function registerGetParamset(server: McpServer, deps: ServerDeps): void {
       const start = Date.now();
 
       try {
-        const iface = args.interface ?? await resolveInterface(args.address, session, rateLimiter, logger);
+        const iface = args.interface ?? await deps.resolver.resolveInterface(args.address, session, rateLimiter, logger);
 
         await rateLimiter.acquire();
         const result = await withRetry(
@@ -220,10 +222,5 @@ function registerGetParamset(server: McpServer, deps: ServerDeps): void {
   );
 }
 
-export function tryParseJson(text: string): unknown {
-  try {
-    return JSON.parse(text);
-  } catch {
-    return text;
-  }
-}
+// tryParseJson re-exported from utils for backward compatibility with tests
+export { tryParseJson } from "../utils.js";

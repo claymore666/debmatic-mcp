@@ -12,8 +12,20 @@ export class RateLimiter {
     this.refillRate = refillRate;
     this.lastRefill = Date.now();
 
-    // Refill tokens periodically
-    this.refillTimer = setInterval(() => this.refill(), 100);
+    // Start refill timer only when there are queued requests
+  }
+
+  private ensureRefillTimer(): void {
+    if (!this.refillTimer && this.waitQueue.length > 0) {
+      this.refillTimer = setInterval(() => {
+        this.refill();
+        if (this.waitQueue.length === 0 && this.refillTimer) {
+          clearInterval(this.refillTimer);
+          this.refillTimer = null;
+        }
+      }, 100);
+      this.refillTimer.unref();
+    }
   }
 
   private refill(): void {
@@ -42,6 +54,7 @@ export class RateLimiter {
     // Wait for a token to become available
     return new Promise<void>((resolve) => {
       this.waitQueue.push(resolve);
+      this.ensureRefillTimer();
     });
   }
 
