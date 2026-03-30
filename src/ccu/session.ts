@@ -1,32 +1,59 @@
+import { readFile, writeFile, rename, mkdir } from "node:fs/promises";
+import { join } from "node:path";
 import type { CcuConfig } from "./types.js";
 import { CcuClient } from "./client.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import type { Logger } from "../logger.js";
 
 const SESSION_RENEW_INTERVAL = 60_000; // Renew every 60s
+const SESSION_FILE = "session.json";
+const LOGIN_RETRY_DELAY = 3_000;
+const LOGIN_MAX_RETRIES = 3;
 
 export class SessionManager {
   private readonly client: CcuClient;
   private readonly config: CcuConfig;
   private readonly logger: Logger;
+  private readonly cacheDir: string;
   private sessionId: string | null = null;
   private renewTimer: ReturnType<typeof setInterval> | null = null;
 
-  constructor(config: CcuConfig, logger: Logger) {
+  constructor(config: CcuConfig, logger: Logger, cacheDir?: string) {
     this.config = config;
     this.client = new CcuClient(config, logger);
     this.logger = logger;
+    this.cacheDir = cacheDir || "/tmp";
   }
 
   async login(): Promise<void> {
-    const result = await this.client.call("Session.login", {
-      username: this.config.user,
-      password: this.config.password,
-    });
+    // Try to reuse a persisted session first
+    const restored = await this.tryRestoreSession();
+    if (restored) return;
 
-    this.sessionId = result as string;
-    this.logger.info("session_login", { sessionActive: true });
-    this.startRenewal();
+    // Fresh login with retry on "too many sessions"
+    for (let attempt = 0; attempt <= LOGIN_MAX_RETRIES; attempt++) {
+      try {
+        const result = await this.client.call("Session.login", {
+          username: this.config.user,
+          password: this.config.password,
+        });
+
+        this.sessionId = result as string;
+        this.logger.info("session_login", { sessionActive: true });
+        this.startRenewal();
+        await this.persistSession();
+        return;
+      } catch (err) {
+        if (err instanceof CcuError && err.structured.message?.includes("too many sessions")) {
+          if (attempt < LOGIN_MAX_RETRIES) {
+            this.logger.warn("session_too_many", { attempt: attempt + 1, retryIn: LOGIN_RETRY_DELAY });
+            await new Promise((r) => setTimeout(r, LOGIN_RETRY_DELAY));
+            continue;
+          }
+        }
+        throw err;
+      }
+    }
   }
 
   async logout(): Promise<void> {
@@ -39,6 +66,7 @@ export class SessionManager {
         this.logger.warn("session_logout_failed");
       }
       this.sessionId = null;
+      await this.clearPersistedSession();
     }
   }
 
@@ -54,10 +82,6 @@ export class SessionManager {
     return this.sessionId;
   }
 
-  /**
-   * Execute a CCU method with automatic session handling.
-   * On auth error (code 400), re-login once and retry.
-   */
   async call(method: string, params: Record<string, unknown> = {}, timeout?: number): Promise<unknown> {
     const paramsWithSession = { ...params, _session_id_: this.getSessionId() };
 
@@ -74,15 +98,63 @@ export class SessionManager {
     }
   }
 
-  /**
-   * Execute a CCU method that requires no session (e.g. Interface.isPresent).
-   */
   async callNoSession(method: string, params: Record<string, unknown> = {}, timeout?: number): Promise<unknown> {
     return this.client.call(method, params, timeout);
   }
 
   isLoggedIn(): boolean {
     return this.sessionId !== null;
+  }
+
+  private async tryRestoreSession(): Promise<boolean> {
+    try {
+      const filePath = join(this.cacheDir, SESSION_FILE);
+      const data = JSON.parse(await readFile(filePath, "utf-8"));
+
+      if (data.sessionId && data.host === this.config.host && data.port === this.config.port) {
+        // Test if session is still valid
+        try {
+          await this.client.call("Session.renew", { _session_id_: data.sessionId });
+          this.sessionId = data.sessionId;
+          this.logger.info("session_restored", { sessionId: "***" });
+          this.startRenewal();
+          return true;
+        } catch {
+          this.logger.info("session_restore_expired");
+        }
+      }
+    } catch {
+      // No persisted session or file doesn't exist
+    }
+    return false;
+  }
+
+  private async persistSession(): Promise<void> {
+    if (!this.sessionId) return;
+    try {
+      await mkdir(this.cacheDir, { recursive: true });
+      const filePath = join(this.cacheDir, SESSION_FILE);
+      const tmpPath = filePath + ".tmp";
+      const data = JSON.stringify({
+        sessionId: this.sessionId,
+        host: this.config.host,
+        port: this.config.port,
+        timestamp: new Date().toISOString(),
+      });
+      await writeFile(tmpPath, data, "utf-8");
+      await rename(tmpPath, filePath);
+    } catch {
+      // Best effort — don't fail if we can't persist
+    }
+  }
+
+  private async clearPersistedSession(): Promise<void> {
+    try {
+      const { unlink } = await import("node:fs/promises");
+      await unlink(join(this.cacheDir, SESSION_FILE));
+    } catch {
+      // Ignore
+    }
   }
 
   private startRenewal(): void {

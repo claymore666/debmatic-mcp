@@ -27,7 +27,7 @@ async function main(): Promise<void> {
   });
 
   // Initialize CCU session
-  const session = new SessionManager(config.ccu, logger);
+  const session = new SessionManager(config.ccu, logger, config.cache.dir);
   const rateLimiter = new RateLimiter(config.rateLimiter.burst, config.rateLimiter.rate);
 
   try {

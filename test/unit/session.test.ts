@@ -11,7 +11,7 @@ function createMockClient() {
 }
 
 function createSession(mockClient: ReturnType<typeof createMockClient>) {
-  const session = new SessionManager(baseConfig, logger);
+  const session = new SessionManager(baseConfig, logger, "/tmp/nonexistent-session-test-" + Date.now());
   (session as any).client = mockClient;
   return session;
 }
@@ -161,15 +161,27 @@ describe("SessionManager", () => {
 
     it("re-logins when renewal fails", async () => {
       const client = createMockClient();
-      client.call.mockResolvedValueOnce("sess");
+      client.call.mockResolvedValueOnce("sess"); // initial login
       const session = createSession(client);
       await session.login();
+      expect(session.getSessionId()).toBe("sess");
 
-      client.call.mockRejectedValueOnce(new Error("renew fail")).mockResolvedValueOnce("new-sess");
+      // Clear persisted session so restore doesn't interfere
+      await (session as any).clearPersistedSession();
+
+      // From here: renewal calls renew (fail), then login() tries Session.login (success)
+      client.call.mockImplementation(async (method: string) => {
+        if (method === "Session.renew") throw new Error("renew fail");
+        if (method === "Session.login") return "new-sess";
+        return null;
+      });
+
       await vi.advanceTimersByTimeAsync(60_000);
+      // Allow async login() chain to complete
+      await vi.advanceTimersByTimeAsync(100);
 
-      // Should have attempted re-login
-      expect(client.call).toHaveBeenCalledWith("Session.login", expect.objectContaining({ username: "Admin" }));
+      // Session should have been replaced
+      expect(session.getSessionId()).toBe("new-sess");
       session.destroy();
     });
   });

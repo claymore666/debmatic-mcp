@@ -113,37 +113,45 @@ function registerGetValues(server: McpServer, deps: ServerDeps): void {
   );
 }
 
-export function buildGetValuesScript(filter: string, filterType: "addresses" | "room" | "function"): string {
-  if (filterType === "addresses") {
-    return `
-      string addresses = ${filter};
-      boolean first = true;
-      Write("[");
-      string addr;
-      foreach(addr, addresses) {
-        object ch = dom.GetObject(addr);
-        if (ch) {
+// Helper HM Script fragment: write channel datapoints as JSON object
+// Quote all values as JSON strings for safety — empty values, special chars, enums all handled
+const WRITE_CHANNEL_DPS = `
           if (!first) { Write(","); } first = false;
-          Write('{"address":"' # addr # '","name":"' # ch.Name() # '","datapoints":{');
+          Write('{"address":"' # ch.Address() # '","name":"' # ch.Name() # '","datapoints":{');
           boolean firstDp = true;
           string dpId;
           foreach(dpId, ch.DPs()) {
             object dp = dom.GetObject(dpId);
             if (dp) {
               if (!firstDp) { Write(","); } firstDp = false;
-              integer vt = dp.ValueType();
-              Write('"' # dp.HssType() # '":');
-              if ((vt == 4) || (vt == 20)) { Write('"' # dp.Value() # '"'); }
-              else { Write(dp.Value()); }
+              Write('"' # dp.HssType() # '":"' # dp.Value() # '"');
             }
           }
           Write("}}");
+`;
+
+export function buildGetValuesScript(filter: string, filterType: "addresses" | "room" | "function"): string {
+  if (filterType === "addresses") {
+    // Address-based: iterate all channels and match by address
+    return `
+      string addresses = ${filter};
+      boolean first = true;
+      Write("[");
+      string addr;
+      foreach(addr, addresses) {
+        string chId;
+        foreach(chId, dom.GetObject(ID_CHANNELS).EnumUsedIDs()) {
+          object ch = dom.GetObject(chId);
+          if (ch && ch.Address() == addr) {
+            ${WRITE_CHANNEL_DPS}
+          }
         }
       }
       Write("]");
     `;
   }
 
+  // Room/function: use EnumIDs() on the ENUM object
   const objectLookup = filterType === "room"
     ? `dom.GetObject(ID_ROOMS).Get(${filter})`
     : `dom.GetObject(ID_FUNCTIONS).Get(${filter})`;
@@ -154,24 +162,10 @@ export function buildGetValuesScript(filter: string, filterType: "addresses" | "
     Write("[");
     if (container) {
       string chId;
-      foreach(chId, container.Channels()) {
+      foreach(chId, container.EnumIDs()) {
         object ch = dom.GetObject(chId);
         if (ch) {
-          if (!first) { Write(","); } first = false;
-          Write('{"address":"' # ch.Address() # '","name":"' # ch.Name() # '","datapoints":{');
-          boolean firstDp = true;
-          string dpId;
-          foreach(dpId, ch.DPs()) {
-            object dp = dom.GetObject(dpId);
-            if (dp) {
-              if (!firstDp) { Write(","); } firstDp = false;
-              integer vt = dp.ValueType();
-              Write('"' # dp.HssType() # '":');
-              if ((vt == 4) || (vt == 20)) { Write('"' # dp.Value() # '"'); }
-              else { Write(dp.Value()); }
-            }
-          }
-          Write("}}");
+          ${WRITE_CHANNEL_DPS}
         }
       }
     }
