@@ -57,10 +57,17 @@ docker run -d \
   debmatic-mcp
 ```
 
-The server generates a bearer token on first startup. Grab it with:
+The server generates a bearer token on first startup and saves it to `/data/.env`. On subsequent starts it reuses the same token. To extract it into your shell:
 
 ```bash
-docker logs debmatic-mcp 2>&1 | grep -oP 'Generated auth token: \K\S+'
+docker exec debmatic-mcp cat /data/.env
+```
+
+Or pipe it straight into your MCP client config:
+
+```bash
+TOKEN=$(docker exec debmatic-mcp cat /data/.env | cut -d= -f2)
+sed -i "s/Bearer .*/Bearer $TOKEN\"/" .mcp.json
 ```
 
 ### From source
