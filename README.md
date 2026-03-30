@@ -32,23 +32,14 @@ There are two ways to run this: **stdio** (the server runs as a subprocess of yo
 
 This is the easiest setup. Your MCP client (Claude Code, Cursor, etc.) starts the server as a child process — no Docker, no network config, no auth tokens.
 
-First, clone and build:
-
-```bash
-git clone https://github.com/claymore666/debmatic-mcp.git
-cd debmatic-mcp
-npm ci
-npm run build
-```
-
-Then tell your MCP client about it. For Claude Code, create a `.mcp.json` file in your project directory (or any directory where you'll use Claude Code):
+For Claude Code, create a `.mcp.json` file in your project directory (or any directory where you'll use Claude Code):
 
 ```json
 {
   "mcpServers": {
     "debmatic": {
-      "command": "node",
-      "args": ["/absolute/path/to/debmatic-mcp/dist/index.js", "--stdio"],
+      "command": "npx",
+      "args": ["debmatic-mcp", "--stdio"],
       "env": {
         "CCU_HOST": "your-ccu-hostname-or-ip",
         "CCU_PASSWORD": "your-ccu-admin-password"
@@ -58,14 +49,14 @@ Then tell your MCP client about it. For Claude Code, create a `.mcp.json` file i
 }
 ```
 
-Replace `/absolute/path/to/debmatic-mcp` with where you cloned the repo, and fill in your CCU's hostname and password. The `CCU_HOST` can be a hostname like `homematic-ccu3` or an IP like `192.168.1.50`.
+Replace `your-ccu-hostname-or-ip` with your CCU's hostname (like `homematic-ccu3`) or IP (like `192.168.1.50`), and `your-ccu-admin-password` with the password you use to log into the CCU WebUI.
 
 Restart Claude Code. Run `/mcp` to check it connected. You should see `debmatic` in the list.
 
 Alternatively, use the Claude Code CLI:
 
 ```bash
-claude mcp add debmatic -- node /absolute/path/to/debmatic-mcp/dist/index.js --stdio
+claude mcp add debmatic -- npx debmatic-mcp --stdio
 ```
 
 ### Option B: Docker (standalone HTTP server)
