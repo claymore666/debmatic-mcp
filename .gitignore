@@ -21,6 +21,11 @@ features.md
 .DS_Store
 Thumbs.db
 
+# Claude Code project config (contains auth tokens)
+.claude/
+.mcp.json
+QA-FINDINGS.md
+
 # IDE
 .vscode/
 .idea/

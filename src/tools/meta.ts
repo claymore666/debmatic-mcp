@@ -103,7 +103,8 @@ Returns: {previousValue, newValue, address, valueKey}
 Idempotent: yes`,
 
   put_paramset: `Write multiple parameters at once.
-Args: address (string), paramsetKey ("VALUES"|"MASTER"), set (object), interface? (auto)
+Args: address (string), paramsetKey ("VALUES"|"MASTER"), set (object with key:value pairs, e.g. {"TEMPERATURE_WINDOW_OPEN": 5.0}), interface? (auto)
+The set object uses simple key:value format — types are auto-resolved from the device type cache. Values are converted to strings internally.
 Returns: {address, paramsetKey, written}
 Idempotent: yes`,
 

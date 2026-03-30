@@ -97,7 +97,7 @@ function registerPutParamset(server: McpServer, deps: ServerDeps): void {
       inputSchema: {
         address: z.string().describe("Channel address"),
         paramsetKey: z.enum(["VALUES", "MASTER"]).describe("Paramset to write"),
-        set: z.record(z.string(), z.unknown()).describe("Key-value pairs to write"),
+        set: z.record(z.string(), z.unknown()).describe("Key-value pairs to write (e.g. {TEMPERATURE_WINDOW_OPEN: 5.0})"),
         interface: z.string().optional().describe("Interface name override"),
       },
       annotations: {
@@ -106,11 +106,19 @@ function registerPutParamset(server: McpServer, deps: ServerDeps): void {
       },
     },
     async (args) => {
-      const { session, rateLimiter, logger } = deps;
+      const { session, rateLimiter, logger, deviceTypeCache } = deps;
       const start = Date.now();
 
       try {
         const iface = args.interface ?? await deps.resolver.resolveInterface(args.address, session, rateLimiter, logger);
+
+        // CCU expects set as array of {name, type, value} objects
+        const paramArray = Object.entries(args.set).map(([name, value]) => {
+          // Try to resolve type from device type cache
+          let type = deps.resolver.resolveType(args.address, name, deviceTypeCache);
+          if (!type) type = inferType(value);
+          return { name, type, value: String(value) };
+        });
 
         await rateLimiter.acquire();
         await withRetry(
@@ -118,7 +126,7 @@ function registerPutParamset(server: McpServer, deps: ServerDeps): void {
             interface: iface,
             address: args.address,
             paramsetKey: args.paramsetKey,
-            set: args.set,
+            set: paramArray,
           }),
           "Interface.putParamset",
           logger,
