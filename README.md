@@ -15,6 +15,10 @@ Ask your AI assistant things like:
 - "Set the living room heating to 21 degrees"
 - "Show me all devices with low battery"
 - "What's the gas meter reading?"
+- "Which devices have low battery or haven't been seen in a long time?"
+- "Find all channels whose names don't match their device name"
+- "Rename all devices to follow a consistent naming convention with floor labels (UG/OG/EG)"
+- "Which room is the window sensor in?"
 
 The MCP server handles device discovery, type resolution, session management, and value conversion — the AI just calls the tools.
 
@@ -161,7 +165,7 @@ All configuration is via environment variables:
 
 **Check health** — `get_service_messages`, `get_system_info`
 
-**Other** — `help` (context-aware), `run_script` (raw HomeMatic Script)
+**Other** — `help` (context-aware), `run_script` (raw HomeMatic Script for bulk operations, renaming devices/channels, querying room membership, or anything not covered by the other tools)
 
 Most tools auto-resolve the interface and value types from the device address — you don't need to know whether a device is on BidCos-RF or HmIP-RF.
 
