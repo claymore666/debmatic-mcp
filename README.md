@@ -27,10 +27,12 @@ The MCP server handles device discovery, type resolution, session management, an
 ## Quick start
 
 ```bash
+export CCU_HOST=your-ccu-hostname-or-ip
+export CCU_PASSWORD=your-ccu-admin-password
 npx debmatic-mcp --stdio
 ```
 
-That's it — downloads and runs the server. Set `CCU_HOST` and `CCU_PASSWORD` as environment variables, or configure them in your MCP client as shown below.
+If it prints `server_ready` to stderr, it's working. Press Ctrl+C to stop. Now set it up in your MCP client — see below.
 
 ## Installation
 
