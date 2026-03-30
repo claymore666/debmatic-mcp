@@ -16,6 +16,7 @@ dist/
 # Project docs (kept local, not in repo)
 CLAUDE.md
 features.md
+QA-FINDINGS.md
 
 # OS
 .DS_Store
@@ -24,7 +25,6 @@ Thumbs.db
 # Claude Code project config (contains auth tokens)
 .claude/
 .mcp.json
-QA-FINDINGS.md
 
 # IDE
 .vscode/
