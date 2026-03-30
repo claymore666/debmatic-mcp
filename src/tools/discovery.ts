@@ -90,8 +90,28 @@ function registerListDevices(server: McpServer, deps: ServerDeps): void {
           );
         }
 
+        const hasFilter = args.room || args.function || args.type || args.name;
+
+        // Compact format when unfiltered (summary only), full details when filtered
+        const output = hasFilter
+          ? devices
+          : devices.map((d) => ({
+              id: d.id,
+              name: d.name,
+              address: d.address,
+              interface: d.interface,
+              type: d.type,
+              channelCount: d.channels.length,
+              channels: d.channels.map((ch) => ({
+                address: ch.address,
+                name: ch.name,
+                index: ch.index,
+                channelType: ch.channelType,
+              })),
+            }));
+
         logger.info("tool_call", { tool: "list_devices", duration_ms: Date.now() - start, status: "ok", deviceCount: devices.length });
-        return toolResult(devices);
+        return toolResult(output);
       } catch (err) {
         logger.info("tool_call", { tool: "list_devices", duration_ms: Date.now() - start, status: "error" });
         if (err instanceof CcuError) return err.toMcpError();

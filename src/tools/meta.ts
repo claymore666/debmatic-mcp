@@ -55,7 +55,8 @@ CCU → Interfaces → Devices → Channels → Datapoints (paramsets)
 const TOOL_HELP: Record<string, string> = {
   list_devices: `List all devices with channels, types, and addresses.
 Args: room? (string), function? (string), type? (string), name? (string)
-Returns: Array of devices with channels
+Returns compact summary when unfiltered (address, name, type, channel names only).
+Returns full details (all channel properties) when any filter is applied.
 Related: describe_device_type, get_value`,
 
   list_interfaces: `List available communication interfaces.
