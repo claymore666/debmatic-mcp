@@ -57,7 +57,11 @@ docker run -d \
   debmatic-mcp
 ```
 
-The server generates a bearer token on first startup — check the logs for it. Use it in your MCP client's HTTP configuration.
+The server generates a bearer token on first startup. Grab it with:
+
+```bash
+docker logs debmatic-mcp 2>&1 | grep -oP 'Generated auth token: \K\S+'
+```
 
 ### From source
 
