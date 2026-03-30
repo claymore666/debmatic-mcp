@@ -1,6 +1,6 @@
 {
   "name": "debmatic-mcp",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "MCP server for controlling HomeMatic smart home devices via the CCU JSON-RPC API",
   "type": "module",
   "main": "dist/index.js",
@@ -23,12 +23,17 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "homematic",
+    "homematic-ip",
     "debmatic",
     "smart-home",
-    "ccu"
+    "ccu",
+    "home-automation",
+    "iot",
+    "eq3"
   ],
-  "author": "",
+  "author": "claymore666",
   "license": "MIT",
   "bugs": {
     "url": "https://github.com/claymore666/debmatic-mcp/issues"
