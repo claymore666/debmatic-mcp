@@ -2,10 +2,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerDeps } from "../server.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import { withRetry } from "../middleware/retry.js";
-
-function toolResult(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
-}
+import { toolResult, tryParseJson, VERSION } from "../utils.js";
 
 export function registerDiagnosticsTools(server: McpServer, deps: ServerDeps): void {
   registerGetServiceMessages(server, deps);
@@ -83,7 +80,7 @@ function registerGetSystemInfo(server: McpServer, deps: ServerDeps): void {
       const start = Date.now();
 
       try {
-        const results: Record<string, unknown> = { serverVersion: "0.1.0" };
+        const results: Record<string, unknown> = { serverVersion: VERSION };
 
         const calls: Array<{ key: string; method: string }> = [
           { key: "version", method: "CCU.getVersion" },
@@ -115,6 +112,5 @@ function registerGetSystemInfo(server: McpServer, deps: ServerDeps): void {
   );
 }
 
-export function tryParseJson(text: string): unknown {
-  try { return JSON.parse(text); } catch { return text; }
-}
+// tryParseJson re-exported from utils for backward compatibility with tests
+export { tryParseJson } from "../utils.js";

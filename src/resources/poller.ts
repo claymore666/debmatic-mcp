@@ -32,6 +32,7 @@ export class ResourcePoller {
 
   start(): void {
     this.timer = setInterval(() => this.poll(), this.intervalMs * 1000);
+    this.timer.unref();
     this.logger.info("resource_poller_started", { interval_s: this.intervalMs });
   }
 
@@ -43,6 +44,9 @@ export class ResourcePoller {
   }
 
   private async poll(): Promise<void> {
+    let anyChanged = false;
+    let anyFailed = false;
+
     for (const resource of POLLABLE) {
       try {
         await this.rateLimiter.acquire();
@@ -54,20 +58,28 @@ export class ResourcePoller {
 
         if (prev && prev !== hash) {
           this.logger.info("resource_changed", { uri: resource.uri });
-          await this.server.sendResourceListChanged();
+          anyChanged = true;
         }
-
-        this.consecutiveFailures = 0;
       } catch (err) {
-        this.consecutiveFailures++;
-        if (this.consecutiveFailures <= 1) {
+        anyFailed = true;
+        if (this.consecutiveFailures === 0) {
           this.logger.warn("resource_poll_failed", { uri: resource.uri, error: (err as Error).message });
         }
-        if (this.consecutiveFailures === 5) {
-          this.logger.error("resource_poll_repeated_failures", { count: 5 });
-        }
-        // Skip this resource, continue polling others
       }
+    }
+
+    // Track consecutive CYCLE failures (all-or-nothing per cycle)
+    if (anyFailed) {
+      this.consecutiveFailures++;
+      if (this.consecutiveFailures === 5) {
+        this.logger.error("resource_poll_repeated_failures", { count: 5 });
+      }
+    } else {
+      this.consecutiveFailures = 0;
+    }
+
+    if (anyChanged) {
+      await this.server.sendResourceListChanged();
     }
   }
 }

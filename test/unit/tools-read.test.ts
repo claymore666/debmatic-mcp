@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { buildGetValuesScript, tryParseJson } from "../../src/tools/read.js";
 import { createTestServer, callTool, parseToolResult, cleanupDeps } from "./_helpers.js";
-import { updateDeviceList, clearResolver } from "../../src/middleware/resolver.js";
 
 describe("buildGetValuesScript", () => {
   it("generates address-based script", () => {
@@ -74,17 +73,13 @@ describe("get_values handler", () => {
 });
 
 describe("get_value handler", () => {
-  beforeEach(() => {
-    clearResolver();
-    updateDeviceList([
-      { id: "1", name: "Dev", address: "AAA", interface: "HmIP-RF", type: "T", operateGroupOnly: "false", isReady: "true", channels: [] },
-    ] as any);
-  });
+  // Populate resolver via deps in each test
 
   it("returns value with auto-resolved interface", async () => {
     const { server, deps } = createTestServer({
       sessionCall: vi.fn().mockResolvedValue(21.5),
     });
+    deps.resolver.updateDeviceList([{ id: "1", name: "Dev", address: "AAA", interface: "HmIP-RF", type: "T", operateGroupOnly: "false", isReady: "true", channels: [] }] as any);
 
     const result = parseToolResult(await callTool(server, "get_value", { address: "AAA:1", valueKey: "ACTUAL_TEMPERATURE" })) as any;
     expect(result.value).toBe(21.5);
@@ -103,18 +98,14 @@ describe("get_value handler", () => {
 });
 
 describe("get_paramset handler", () => {
-  beforeEach(() => {
-    clearResolver();
-    updateDeviceList([
-      { id: "1", name: "Dev", address: "AAA", interface: "HmIP-RF", type: "T", operateGroupOnly: "false", isReady: "true", channels: [] },
-    ] as any);
-  });
+  // Populate resolver via deps in each test
 
   it("reads paramset with auto-resolved interface", async () => {
     const mockParamset = [{ ID: "TEMP", TYPE: "FLOAT", OPERATIONS: "5" }];
     const { server, deps } = createTestServer({
       sessionCall: vi.fn().mockResolvedValue(mockParamset),
     });
+    deps.resolver.updateDeviceList([{ id: "1", name: "Dev", address: "AAA", interface: "HmIP-RF", type: "T", operateGroupOnly: "false", isReady: "true", channels: [] }] as any);
 
     const result = parseToolResult(await callTool(server, "get_paramset", { address: "AAA:1", paramsetKey: "VALUES" })) as any;
     expect(result.paramsetKey).toBe("VALUES");

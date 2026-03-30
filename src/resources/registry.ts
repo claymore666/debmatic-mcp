@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerDeps } from "../server.js";
 import { withRetry } from "../middleware/retry.js";
+import { VERSION } from "../utils.js";
 
 export function registerResources(server: McpServer, deps: ServerDeps): void {
   const { session, rateLimiter, logger, deviceTypeCache } = deps;
@@ -39,7 +40,7 @@ export function registerResources(server: McpServer, deps: ServerDeps): void {
   }));
 
   server.registerResource("system", "homematic://system", { description: "CCU system info" }, async () => {
-    const info: Record<string, unknown> = { serverVersion: "0.1.0" };
+    const info: Record<string, unknown> = { serverVersion: VERSION };
     for (const [key, method] of [["version", "CCU.getVersion"], ["serial", "CCU.getSerial"]] as const) {
       try { info[key] = await ccuRead(method); } catch { info[key] = null; }
     }

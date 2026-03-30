@@ -3,13 +3,12 @@ import type { CcuConfig, CcuRpcRequest, CcuRpcResponse } from "./types.js";
 import { CcuError, mapCcuError, mapNetworkError } from "../middleware/error-mapper.js";
 import type { Logger } from "../logger.js";
 
-let requestCounter = 0;
-
 export class CcuClient {
   private readonly baseUrl: string;
   private readonly config: CcuConfig;
   private readonly logger: Logger;
   private readonly dispatcher: Agent | undefined;
+  private requestCounter = 0;
 
   constructor(config: CcuConfig, logger: Logger) {
     this.config = config;
@@ -27,7 +26,7 @@ export class CcuClient {
   }
 
   async call(method: string, params: Record<string, unknown>, timeout?: number): Promise<unknown> {
-    const id = String(++requestCounter);
+    const id = String(++this.requestCounter);
     const effectiveTimeout = timeout ?? this.config.timeout;
 
     const request: CcuRpcRequest = { id, method, params };

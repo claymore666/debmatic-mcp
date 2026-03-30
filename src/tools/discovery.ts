@@ -4,7 +4,7 @@ import type { ServerDeps } from "../server.js";
 import type { CcuDevice } from "../ccu/types.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import { withRetry } from "../middleware/retry.js";
-import { updateDeviceList } from "../middleware/resolver.js";
+import { toolResult } from "../utils.js";
 
 export function registerDiscoveryTools(server: McpServer, deps: ServerDeps): void {
   registerListDevices(server, deps);
@@ -14,10 +14,6 @@ export function registerDiscoveryTools(server: McpServer, deps: ServerDeps): voi
   registerListPrograms(server, deps);
   registerListSystemVariables(server, deps);
   registerDescribeDeviceType(server, deps);
-}
-
-function toolResult(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
 }
 
 function registerListDevices(server: McpServer, deps: ServerDeps): void {
@@ -51,7 +47,7 @@ function registerListDevices(server: McpServer, deps: ServerDeps): void {
         let devices = result as CcuDevice[];
 
         // Update resolver's device list
-        updateDeviceList(devices);
+        deps.resolver.updateDeviceList(devices);
 
         if (args.room || args.function) {
           const channelIds = new Set<string>();
@@ -257,22 +253,42 @@ function registerDescribeDeviceType(server: McpServer, deps: ServerDeps): void {
       },
     },
     async (args) => {
-      const { logger, deviceTypeCache } = deps;
+      const { session, rateLimiter, logger, deviceTypeCache } = deps;
       const start = Date.now();
 
-      const cached = deviceTypeCache.get(args.deviceType);
+      let cached = deviceTypeCache.get(args.deviceType);
 
       if (cached) {
         logger.info("tool_call", { tool: "describe_device_type", duration_ms: Date.now() - start, status: "ok", cached: true });
         return toolResult({ deviceType: args.deviceType, ...cached });
       }
 
-      // Cache miss — return what we know
+      // Cache miss — try live query if we can find a device instance
+      const devices = deps.resolver.getDeviceList();
+      if (devices) {
+        const device = devices.find((d) => d.type === args.deviceType);
+        if (device) {
+          try {
+            cached = await deviceTypeCache.queryAndCache(
+              args.deviceType, device.address, device.interface,
+              device.channels.map((ch) => ch.address),
+              session, rateLimiter,
+            );
+            if (cached) {
+              logger.info("tool_call", { tool: "describe_device_type", duration_ms: Date.now() - start, status: "ok", cached: false });
+              return toolResult({ deviceType: args.deviceType, ...cached });
+            }
+          } catch {
+            // Live query failed — fall through to cache-miss message
+          }
+        }
+      }
+
       logger.info("tool_call", { tool: "describe_device_type", duration_ms: Date.now() - start, status: "ok", cached: false });
       return toolResult({
         deviceType: args.deviceType,
         message: "Device type not in cache. Cache may still be warming. Try again shortly or call list_devices first.",
-        availableTypes: Array.from(deviceTypeCache.getAll() ? Object.keys(deviceTypeCache.getAll()) : []),
+        availableTypes: Object.keys(deviceTypeCache.getAll()),
       });
     },
   );

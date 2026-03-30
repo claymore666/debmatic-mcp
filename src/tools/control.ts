@@ -3,11 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerDeps } from "../server.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import { withRetry } from "../middleware/retry.js";
-import { resolveInterface, resolveType } from "../middleware/resolver.js";
-
-function toolResult(data: unknown) {
-  return { content: [{ type: "text" as const, text: JSON.stringify(data, null, 2) }] };
-}
+import { toolResult } from "../utils.js";
 
 export function registerControlTools(server: McpServer, deps: ServerDeps): void {
   registerSetValue(server, deps);
@@ -42,8 +38,8 @@ function registerSetValue(server: McpServer, deps: ServerDeps): void {
       const start = Date.now();
 
       try {
-        const iface = args.interface ?? await resolveInterface(args.address, session, rateLimiter, logger);
-        const valueType = args.type ?? resolveType(args.address, args.valueKey, deviceTypeCache) ?? inferType(args.value);
+        const iface = args.interface ?? await deps.resolver.resolveInterface(args.address, session, rateLimiter, logger);
+        const valueType = args.type ?? deps.resolver.resolveType(args.address, args.valueKey, deviceTypeCache) ?? inferType(args.value);
 
         // Read previous value (best-effort)
         let previousValue: unknown = null;
@@ -114,7 +110,7 @@ function registerPutParamset(server: McpServer, deps: ServerDeps): void {
       const start = Date.now();
 
       try {
-        const iface = args.interface ?? await resolveInterface(args.address, session, rateLimiter, logger);
+        const iface = args.interface ?? await deps.resolver.resolveInterface(args.address, session, rateLimiter, logger);
 
         await rateLimiter.acquire();
         await withRetry(
@@ -160,15 +156,48 @@ function registerSetSystemVariable(server: McpServer, deps: ServerDeps): void {
       const start = Date.now();
 
       try {
-        // Detect type from value
+        // Look up variable type from CCU to choose correct setter
         let method: string;
-        if (typeof args.value === "boolean") {
-          method = "SysVar.setBool";
-        } else if (typeof args.value === "number") {
-          method = "SysVar.setFloat";
+        await rateLimiter.acquire();
+        const allVars = await withRetry(
+          () => session.call("SysVar.getAll"),
+          "SysVar.getAll",
+          logger,
+        ) as Array<{ name: string; type: string }>;
+
+        const sysVar = allVars.find((v) => v.name === args.name);
+        if (sysVar) {
+          const varType = sysVar.type.toUpperCase();
+          if (varType.includes("BOOL") || varType.includes("ALARM")) {
+            method = "SysVar.setBool";
+          } else if (varType.includes("FLOAT") || varType.includes("NUMBER") || varType.includes("INTEGER")) {
+            method = "SysVar.setFloat";
+          } else if (varType.includes("ENUM") || varType.includes("LIST")) {
+            method = "SysVar.setFloat"; // Enums use numeric index
+          } else if (varType.includes("STRING")) {
+            // String variables: use ReGa.runScript as there's no SysVar.setString API
+            await rateLimiter.acquire();
+            const escapedName = String(args.name).replace(/"/g, '\\"');
+            const escapedValue = String(args.value).replace(/"/g, '\\"');
+            await withRetry(
+              () => session.call("ReGa.runScript", {
+                script: `var sv = dom.GetObject("${escapedName}"); if (sv) { sv.State("${escapedValue}"); }`,
+              }, deps.config.ccu.scriptTimeout),
+              "ReGa.runScript",
+              logger,
+            );
+            logger.info("tool_call", { tool: "set_system_variable", duration_ms: Date.now() - start, status: "ok" });
+            return toolResult({ name: args.name, value: args.value, method: "ReGa.runScript (string)" });
+          } else {
+            logger.warn("sysvar_unknown_type", { name: args.name, type: sysVar.type });
+            method = "SysVar.setBool"; // Last resort fallback
+          }
         } else {
-          // Could be enum or string — try setFloat first if it looks numeric
-          method = isNaN(Number(args.value)) ? "SysVar.setBool" : "SysVar.setFloat";
+          // Variable not found — fall back to type inference from value
+          logger.warn("sysvar_not_found", { name: args.name });
+          method = typeof args.value === "boolean" ? "SysVar.setBool"
+            : typeof args.value === "number" ? "SysVar.setFloat"
+            : "SysVar.setBool";
         }
 
         await rateLimiter.acquire();

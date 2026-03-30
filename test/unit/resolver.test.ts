@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from "vitest";
-import { updateDeviceList, resolveType, getDeviceType, clearResolver } from "../../src/middleware/resolver.js";
+import { Resolver } from "../../src/middleware/resolver.js";
 import { DeviceTypeCache } from "../../src/cache/device-type-cache.js";
 import { Logger } from "../../src/logger.js";
 import type { CcuDevice } from "../../src/ccu/types.js";
@@ -28,27 +28,40 @@ const mockDevices: CcuDevice[] = [
   },
 ];
 
-describe("resolver", () => {
+describe("Resolver", () => {
+  let resolver: Resolver;
+
   beforeEach(() => {
-    clearResolver();
+    resolver = new Resolver();
   });
 
   describe("updateDeviceList + getDeviceType", () => {
     it("resolves device type from address", () => {
-      updateDeviceList(mockDevices);
-      expect(getDeviceType("000A1BE9A71F15")).toBe("HmIP-eTRV-2");
-      expect(getDeviceType("00109D898C36B0")).toBe("HmIP-SWDO-I");
+      resolver.updateDeviceList(mockDevices);
+      expect(resolver.getDeviceType("000A1BE9A71F15")).toBe("HmIP-eTRV-2");
+      expect(resolver.getDeviceType("00109D898C36B0")).toBe("HmIP-SWDO-I");
     });
 
     it("returns undefined for unknown address", () => {
-      updateDeviceList(mockDevices);
-      expect(getDeviceType("UNKNOWN")).toBeUndefined();
+      resolver.updateDeviceList(mockDevices);
+      expect(resolver.getDeviceType("UNKNOWN")).toBeUndefined();
+    });
+  });
+
+  describe("getDeviceList", () => {
+    it("returns null before population", () => {
+      expect(resolver.getDeviceList()).toBeNull();
+    });
+
+    it("returns devices after population", () => {
+      resolver.updateDeviceList(mockDevices);
+      expect(resolver.getDeviceList()!.length).toBe(2);
     });
   });
 
   describe("resolveType", () => {
     it("resolves FLOAT to double", () => {
-      updateDeviceList(mockDevices);
+      resolver.updateDeviceList(mockDevices);
       const cache = new DeviceTypeCache("/tmp", 86400, logger);
       (cache as any).cache.set("HmIP-eTRV-2", {
         interface: "HmIP-RF",
@@ -59,79 +72,67 @@ describe("resolver", () => {
               VALUES: {
                 SET_POINT_TEMPERATURE: { type: "FLOAT", operations: 7 },
                 ACTUAL_TEMPERATURE: { type: "FLOAT", operations: 5 },
-                LEVEL: { type: "FLOAT", operations: 5 },
               },
             },
           },
         },
       });
 
-      expect(resolveType("000A1BE9A71F15:1", "SET_POINT_TEMPERATURE", cache)).toBe("double");
-      expect(resolveType("000A1BE9A71F15:1", "ACTUAL_TEMPERATURE", cache)).toBe("double");
+      expect(resolver.resolveType("000A1BE9A71F15:1", "SET_POINT_TEMPERATURE", cache)).toBe("double");
+      expect(resolver.resolveType("000A1BE9A71F15:1", "ACTUAL_TEMPERATURE", cache)).toBe("double");
     });
 
     it("resolves BOOL to bool", () => {
-      updateDeviceList(mockDevices);
+      resolver.updateDeviceList(mockDevices);
       const cache = new DeviceTypeCache("/tmp", 86400, logger);
       (cache as any).cache.set("HmIP-eTRV-2", {
         interface: "HmIP-RF",
         channels: {
           "0": {
             type: "MAINTENANCE",
-            paramsets: {
-              VALUES: {
-                LOWBAT: { type: "BOOL", operations: 5 },
-                UNREACH: { type: "BOOL", operations: 5 },
-              },
-            },
+            paramsets: { VALUES: { LOWBAT: { type: "BOOL", operations: 5 } } },
           },
         },
       });
 
-      expect(resolveType("000A1BE9A71F15:0", "LOWBAT", cache)).toBe("bool");
+      expect(resolver.resolveType("000A1BE9A71F15:0", "LOWBAT", cache)).toBe("bool");
     });
 
     it("resolves INTEGER to int", () => {
-      updateDeviceList(mockDevices);
+      resolver.updateDeviceList(mockDevices);
       const cache = new DeviceTypeCache("/tmp", 86400, logger);
       (cache as any).cache.set("HmIP-eTRV-2", {
         interface: "HmIP-RF",
         channels: {
-          "1": {
-            type: "HEATING",
-            paramsets: { VALUES: { BOOST_TIME: { type: "INTEGER", operations: 5 } } },
-          },
+          "1": { type: "HEATING", paramsets: { VALUES: { BOOST_TIME: { type: "INTEGER", operations: 5 } } } },
         },
       });
 
-      expect(resolveType("000A1BE9A71F15:1", "BOOST_TIME", cache)).toBe("int");
+      expect(resolver.resolveType("000A1BE9A71F15:1", "BOOST_TIME", cache)).toBe("int");
     });
 
     it("resolves ENUM to int", () => {
-      updateDeviceList(mockDevices);
+      resolver.updateDeviceList(mockDevices);
       const cache = new DeviceTypeCache("/tmp", 86400, logger);
       (cache as any).cache.set("HmIP-eTRV-2", {
         interface: "HmIP-RF",
         channels: {
-          "1": {
-            type: "HEATING",
-            paramsets: { VALUES: { CONTROL_MODE: { type: "ENUM", operations: 7 } } },
-          },
+          "1": { type: "HEATING", paramsets: { VALUES: { CONTROL_MODE: { type: "ENUM", operations: 7 } } } },
         },
       });
 
-      expect(resolveType("000A1BE9A71F15:1", "CONTROL_MODE", cache)).toBe("int");
+      expect(resolver.resolveType("000A1BE9A71F15:1", "CONTROL_MODE", cache)).toBe("int");
     });
 
     it("returns undefined for unknown device type", () => {
-      updateDeviceList(mockDevices);
+      resolver.updateDeviceList(mockDevices);
       const cache = new DeviceTypeCache("/tmp", 86400, logger);
-      expect(resolveType("000A1BE9A71F15:1", "SOMETHING", cache)).toBeUndefined();
+      expect(resolver.resolveType("000A1BE9A71F15:1", "SOMETHING", cache)).toBeUndefined();
     });
 
     it("returns undefined when resolver not populated", () => {
       const cache = new DeviceTypeCache("/tmp", 86400, logger);
-      expect(resolveType("UNKNOWN:1", "STATE", cache)).toBeUndefined();
+      expect(resolver.resolveType("UNKNOWN:1", "STATE", cache)).toBeUndefined();
     });
   });
 });

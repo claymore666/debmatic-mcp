@@ -3,7 +3,7 @@ import { SessionManager } from "../../src/ccu/session.js";
 import { DeviceTypeCache } from "../../src/cache/device-type-cache.js";
 import { RateLimiter } from "../../src/middleware/rate-limiter.js";
 import { createLogger } from "../../src/logger.js";
-import { updateDeviceList } from "../../src/middleware/resolver.js";
+import { Resolver } from "../../src/middleware/resolver.js";
 import type { CcuConfig, CcuDevice } from "../../src/ccu/types.js";
 import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
@@ -189,11 +189,11 @@ describeIf("CCU Integration (against debmatic)", () => {
 
   it("resolver populates from Device.listAllDetail", async () => {
     const devices = await session.call("Device.listAllDetail") as CcuDevice[];
-    updateDeviceList(devices);
+    const resolver = new Resolver();
+    resolver.updateDeviceList(devices);
 
-    const { getDeviceType } = await import("../../src/middleware/resolver.js");
     // First device should resolve
-    const type = getDeviceType(devices[0]!.address);
+    const type = resolver.getDeviceType(devices[0]!.address);
     expect(type).toBe(devices[0]!.type);
   });
 
