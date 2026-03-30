@@ -115,6 +115,6 @@ function registerGetSystemInfo(server: McpServer, deps: ServerDeps): void {
   );
 }
 
-function tryParseJson(text: string): unknown {
+export function tryParseJson(text: string): unknown {
   try { return JSON.parse(text); } catch { return text; }
 }

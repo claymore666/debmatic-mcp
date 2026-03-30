@@ -117,7 +117,7 @@ function registerGetValues(server: McpServer, deps: ServerDeps): void {
   );
 }
 
-function buildGetValuesScript(filter: string, filterType: "addresses" | "room" | "function"): string {
+export function buildGetValuesScript(filter: string, filterType: "addresses" | "room" | "function"): string {
   if (filterType === "addresses") {
     return `
       string addresses = ${filter};
@@ -220,7 +220,7 @@ function registerGetParamset(server: McpServer, deps: ServerDeps): void {
   );
 }
 
-function tryParseJson(text: string): unknown {
+export function tryParseJson(text: string): unknown {
   try {
     return JSON.parse(text);
   } catch {

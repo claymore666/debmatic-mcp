@@ -225,7 +225,7 @@ function registerExecuteProgram(server: McpServer, deps: ServerDeps): void {
   );
 }
 
-function inferType(value: unknown): string {
+export function inferType(value: unknown): string {
   if (typeof value === "boolean") return "bool";
   if (typeof value === "number") return Number.isInteger(value) ? "int" : "double";
   return "string";
