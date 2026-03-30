@@ -18,59 +18,21 @@ Ask your AI assistant things like:
 
 The MCP server handles device discovery, type resolution, session management, and value conversion — the AI just calls the tools.
 
+## Prerequisites
+
+- A running HomeMatic CCU (debmatic, CCU3, or RaspberryMatic) reachable on your network
+- The CCU's admin username and password (the same credentials you use to log into the WebUI)
+- Node.js 22+ (for running from source or stdio mode) or Docker
+
 ## Installation
 
-### Claude Code (recommended)
+There are two ways to run this: **stdio** (the server runs as a subprocess of your MCP client) or **HTTP** (the server runs standalone in Docker and clients connect over the network). Pick one.
 
-Add to your project's `.mcp.json`:
+### Option A: stdio (direct, simplest)
 
-```json
-{
-  "mcpServers": {
-    "debmatic": {
-      "command": "node",
-      "args": ["/path/to/debmatic-mcp/dist/index.js", "--stdio"],
-      "env": {
-        "CCU_HOST": "your-ccu-hostname",
-        "CCU_PASSWORD": "your-password"
-      }
-    }
-  }
-}
-```
+This is the easiest setup. Your MCP client (Claude Code, Cursor, etc.) starts the server as a child process — no Docker, no network config, no auth tokens.
 
-Or use the CLI:
-
-```bash
-claude mcp add debmatic -- node /path/to/debmatic-mcp/dist/index.js --stdio
-```
-
-### Docker
-
-```bash
-docker run -d \
-  --name debmatic-mcp \
-  -e CCU_HOST=your-ccu-hostname \
-  -e CCU_PASSWORD=your-password \
-  -v debmatic-data:/data \
-  -p 3000:3000 \
-  debmatic-mcp
-```
-
-The server generates a bearer token on first startup and saves it to `/data/.env`. On subsequent starts it reuses the same token. To extract it into your shell:
-
-```bash
-docker exec debmatic-mcp cat /data/.env
-```
-
-Or pipe it straight into your MCP client config:
-
-```bash
-TOKEN=$(docker exec debmatic-mcp cat /data/.env | cut -d= -f2)
-sed -i "s/Bearer .*/Bearer $TOKEN\"/" .mcp.json
-```
-
-### From source
+First, clone and build:
 
 ```bash
 git clone https://github.com/claymore666/debmatic-mcp.git
@@ -78,6 +40,98 @@ cd debmatic-mcp
 npm ci
 npm run build
 ```
+
+Then tell your MCP client about it. For Claude Code, create a `.mcp.json` file in your project directory (or any directory where you'll use Claude Code):
+
+```json
+{
+  "mcpServers": {
+    "debmatic": {
+      "command": "node",
+      "args": ["/absolute/path/to/debmatic-mcp/dist/index.js", "--stdio"],
+      "env": {
+        "CCU_HOST": "your-ccu-hostname-or-ip",
+        "CCU_PASSWORD": "your-ccu-admin-password"
+      }
+    }
+  }
+}
+```
+
+Replace `/absolute/path/to/debmatic-mcp` with where you cloned the repo, and fill in your CCU's hostname and password. The `CCU_HOST` can be a hostname like `homematic-ccu3` or an IP like `192.168.1.50`.
+
+Restart Claude Code. Run `/mcp` to check it connected. You should see `debmatic` in the list.
+
+Alternatively, use the Claude Code CLI:
+
+```bash
+claude mcp add debmatic -- node /absolute/path/to/debmatic-mcp/dist/index.js --stdio
+```
+
+### Option B: Docker (standalone HTTP server)
+
+Use this if you want the server running independently — for example on a home server, accessible to multiple clients, or when your MCP client supports HTTP remotes.
+
+**1. Start the container:**
+
+```bash
+docker run -d \
+  --name debmatic-mcp \
+  -e CCU_HOST=your-ccu-hostname-or-ip \
+  -e CCU_PASSWORD=your-ccu-admin-password \
+  -v debmatic-data:/data \
+  -p 3000:3000 \
+  debmatic-mcp
+```
+
+**2. Get the auth token.** The server generates a random bearer token on first startup and saves it inside the container's data volume. You need this token to authenticate your MCP client. Grab it with:
+
+```bash
+docker exec debmatic-mcp cat /data/.env
+```
+
+This prints something like `MCP_AUTH_TOKEN=e96suzi1iG0H-GPif6K2...`. The part after `=` is your token.
+
+**3. Configure your MCP client.** If your client uses `.mcp.json`, add the HTTP server:
+
+```json
+{
+  "mcpServers": {
+    "debmatic": {
+      "url": "http://your-server-ip:3000",
+      "headers": {
+        "Authorization": "Bearer PASTE-YOUR-TOKEN-HERE"
+      }
+    }
+  }
+}
+```
+
+To inject the token automatically (requires `jq`):
+
+```bash
+TOKEN=$(docker exec debmatic-mcp cat /data/.env | cut -d= -f2)
+jq --arg t "$TOKEN" '.mcpServers.debmatic.headers.Authorization = "Bearer " + $t' .mcp.json > .mcp.json.tmp && mv .mcp.json.tmp .mcp.json
+```
+
+This only updates the `debmatic` entry — other servers in your `.mcp.json` are left alone.
+
+**4. Check it's healthy:**
+
+```bash
+curl http://localhost:3000/health
+```
+
+### HTTPS
+
+If your CCU uses HTTPS (self-signed certificates are fine), add these environment variables:
+
+```bash
+CCU_HTTPS=true
+CCU_PORT=443
+```
+
+The server accepts self-signed certificates automatically.
 
 ## Configuration
 
