@@ -13,6 +13,10 @@ dist/
 # Cache (runtime, not committed)
 /data/
 
+# Project docs (kept local, not in repo)
+CLAUDE.md
+features.md
+
 # OS
 .DS_Store
 Thumbs.db
