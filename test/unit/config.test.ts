@@ -22,6 +22,8 @@ describe("loadConfig", () => {
     delete process.env.CCU_RATE_LIMIT_BURST;
     delete process.env.CCU_RATE_LIMIT_RATE;
     delete process.env.RESOURCE_POLL_INTERVAL;
+    delete process.env.CCU_TIMEOUT;
+    delete process.env.CCU_SCRIPT_TIMEOUT;
     delete process.env.LOG_LEVEL;
   });
 
@@ -50,6 +52,8 @@ describe("loadConfig", () => {
     expect(config.ccu.https).toBe(false);
     expect(config.ccu.user).toBe("Admin");
     expect(config.ccu.password).toBe("secret");
+    expect(config.ccu.timeout).toBe(10000);
+    expect(config.ccu.scriptTimeout).toBe(30000);
     expect(config.mcp.transport).toBe("http");
     expect(config.mcp.port).toBe(3000);
     expect(config.cache.dir).toBe("/data");
@@ -111,6 +115,8 @@ describe("loadConfig", () => {
     process.env.CCU_RATE_LIMIT_BURST = "50";
     process.env.CCU_RATE_LIMIT_RATE = "25";
     process.env.RESOURCE_POLL_INTERVAL = "120";
+    process.env.CCU_TIMEOUT = "5000";
+    process.env.CCU_SCRIPT_TIMEOUT = "60000";
     const config = loadConfig();
 
     expect(config.ccu.host).toBe("192.168.1.100");
@@ -123,5 +129,7 @@ describe("loadConfig", () => {
     expect(config.rateLimiter.burst).toBe(50);
     expect(config.rateLimiter.rate).toBe(25);
     expect(config.resourcePollInterval).toBe(120);
+    expect(config.ccu.timeout).toBe(5000);
+    expect(config.ccu.scriptTimeout).toBe(60000);
   });
 });

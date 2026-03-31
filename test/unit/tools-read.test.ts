@@ -4,8 +4,10 @@ import { createTestServer, callTool, parseToolResult, cleanupDeps } from "./_hel
 
 describe("buildGetValuesScript", () => {
   it("generates address-based script", () => {
-    const script = buildGetValuesScript('{"addr1:1","addr2:1"}', "addresses");
-    expect(script).toContain("foreach(addr, addresses)");
+    // Production code builds sentinel-comma format: ",addr1:1,addr2:1,"
+    const script = buildGetValuesScript('",addr1:1,addr2:1,"', "addresses");
+    expect(script).toContain("targetAddrs");
+    expect(script).toContain("Find(needle)");
     expect(script).toContain("ch.DPs()");
   });
 

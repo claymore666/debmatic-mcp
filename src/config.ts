@@ -48,8 +48,8 @@ export function loadConfig(): AppConfig {
       https: process.env.CCU_HTTPS === "true",
       user: process.env.CCU_USER || "Admin",
       password,
-      timeout: 10_000,
-      scriptTimeout: 30_000,
+      timeout: parseIntEnv("CCU_TIMEOUT", "10000"),
+      scriptTimeout: parseIntEnv("CCU_SCRIPT_TIMEOUT", "30000"),
     },
     mcp: {
       transport,

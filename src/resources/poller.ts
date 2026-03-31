@@ -17,9 +17,14 @@ const POLLABLE: PollableResource[] = [
   { uri: "homematic://sysvars", method: "SysVar.getAll" },
 ];
 
+// Backoff: 1×, 2×, 4×, 8×, capped at 10× the base interval
+const MAX_BACKOFF_MULTIPLIER = 10;
+
 export class ResourcePoller {
   private hashes = new Map<string, string>();
-  private timer: ReturnType<typeof setInterval> | null = null;
+  private timer: ReturnType<typeof setTimeout> | null = null;
+  // Counts consecutive poll cycles where at least one resource failed.
+  // Used to apply exponential backoff on the next schedule.
   private consecutiveFailures = 0;
 
   constructor(
@@ -31,16 +36,30 @@ export class ResourcePoller {
   ) {}
 
   start(): void {
-    this.timer = setInterval(() => this.poll(), this.intervalMs * 1000);
-    this.timer.unref();
+    this.schedule(this.intervalMs * 1000);
     this.logger.info("resource_poller_started", { interval_s: this.intervalMs });
   }
 
   stop(): void {
     if (this.timer) {
-      clearInterval(this.timer);
+      clearTimeout(this.timer);
       this.timer = null;
     }
+  }
+
+  private schedule(delayMs: number): void {
+    this.timer = setTimeout(() => {
+      this.poll().finally(() => {
+        if (this.timer !== null) {
+          // still running (not stopped)
+          const multiplier = this.consecutiveFailures > 0
+            ? Math.min(Math.pow(2, this.consecutiveFailures - 1), MAX_BACKOFF_MULTIPLIER)
+            : 1;
+          this.schedule(this.intervalMs * 1000 * multiplier);
+        }
+      });
+    }, delayMs);
+    this.timer.unref();
   }
 
   private async poll(): Promise<void> {
@@ -62,13 +81,10 @@ export class ResourcePoller {
         }
       } catch (err) {
         anyFailed = true;
-        if (this.consecutiveFailures === 0) {
-          this.logger.warn("resource_poll_failed", { uri: resource.uri, error: (err as Error).message });
-        }
+        this.logger.warn("resource_poll_failed", { uri: resource.uri, error: (err as Error).message });
       }
     }
 
-    // Track consecutive CYCLE failures (all-or-nothing per cycle)
     if (anyFailed) {
       this.consecutiveFailures++;
       if (this.consecutiveFailures === 5) {

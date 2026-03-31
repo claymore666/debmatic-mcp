@@ -18,8 +18,11 @@ export function tryParseJson(text: string): unknown {
   try { return JSON.parse(text); } catch { return text; }
 }
 
-/** Server version constant — single source of truth. */
-export const VERSION = "0.1.0";
+import { createRequire } from "node:module";
+const _require = createRequire(import.meta.url);
+
+/** Server version — read from package.json at runtime, single source of truth. */
+export const VERSION: string = (_require("../package.json") as { version: string }).version;
 
 /**
  * Parse a CCU string value to a native JS type.

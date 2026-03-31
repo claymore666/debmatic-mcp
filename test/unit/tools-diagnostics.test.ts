@@ -55,7 +55,7 @@ describe("get_system_info handler", () => {
     const result = parseToolResult(await callTool(server, "get_system_info")) as any;
     expect(result.version).toBe("3.75.6");
     expect(result.serial).toBe("NEQ1234567");
-    expect(result.serverVersion).toBe("0.1.0");
+    expect(result.serverVersion).toBe("1.0.0");
     expect(result.cacheTypes).toBe(0);
     expect(typeof result.cacheWarming).toBe("boolean");
     cleanupDeps(deps);

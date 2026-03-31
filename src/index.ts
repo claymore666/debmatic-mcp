@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import { createServer } from "node:http";
-import { timingSafeEqual } from "node:crypto";
+import { createHash, timingSafeEqual } from "node:crypto";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { loadConfig } from "./config.js";
@@ -70,12 +70,13 @@ async function main(): Promise<void> {
         return;
       }
 
-      // Auth check for MCP endpoints (timing-safe comparison)
-      const authHeader = req.headers.authorization;
+      // Auth check for MCP endpoints (timing-safe: hash both sides so length
+      // differences don't create a timing side-channel)
+      const authHeader = req.headers.authorization ?? "";
       const expected = `Bearer ${authToken}`;
-      const headerValid = authHeader !== undefined
-        && authHeader.length === expected.length
-        && timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+      const ha = createHash("sha256").update(authHeader).digest();
+      const hb = createHash("sha256").update(expected).digest();
+      const headerValid = timingSafeEqual(ha, hb);
       if (!headerValid) {
         res.writeHead(401, { "Content-Type": "application/json" });
         res.end(JSON.stringify({ error: "Unauthorized" }));
