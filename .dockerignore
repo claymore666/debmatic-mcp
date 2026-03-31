@@ -3,5 +3,10 @@ dist
 .git
 *.md
 test
-code-review-report.md
 .claude
+/data/
+.env
+.env.*
+.mcp.json
+.vscode/
+.idea/

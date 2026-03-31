@@ -1,6 +1,6 @@
 {
   "name": "debmatic-mcp",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "MCP server for controlling HomeMatic smart home devices via the CCU JSON-RPC API",
   "mcpName": "debmatic-mcp",
   "type": "module",
@@ -48,7 +48,7 @@
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.28.0",
     "undici": "^7.24.6",
-    "zod": "^3.25"
+    "zod": "^3.25 || ^4.0"
   },
   "devDependencies": {
     "@types/node": "^25.5.0",

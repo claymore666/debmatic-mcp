@@ -3,12 +3,16 @@ import type { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import type { SessionManager } from "../ccu/session.js";
 import type { RateLimiter } from "../middleware/rate-limiter.js";
 import type { Logger } from "../logger.js";
+import { withRetry } from "../middleware/retry.js";
 
 interface PollableResource {
   uri: string;
   method: string;
 }
 
+// Only mutable CCU resources are polled. Static/rarely-changing resources are excluded:
+// - homematic://system: server version + CCU firmware, changes only on deliberate upgrades
+// - homematic://device-types: cache managed separately by DeviceTypeCache
 const POLLABLE: PollableResource[] = [
   { uri: "homematic://devices", method: "Device.listAllDetail" },
   { uri: "homematic://rooms", method: "Room.getAll" },
@@ -69,7 +73,11 @@ export class ResourcePoller {
     for (const resource of POLLABLE) {
       try {
         await this.rateLimiter.acquire();
-        const data = await this.session.call(resource.method);
+        const data = await withRetry(
+          () => this.session.call(resource.method),
+          resource.method,
+          this.logger,
+        );
         const hash = createHash("sha256").update(JSON.stringify(data)).digest("hex");
 
         const prev = this.hashes.get(resource.uri);

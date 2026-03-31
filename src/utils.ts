@@ -1,3 +1,9 @@
+import { createRequire } from "node:module";
+const _require = createRequire(import.meta.url);
+
+/** Server version — read from package.json at runtime, single source of truth. */
+export const VERSION: string = (_require("../package.json") as { version: string }).version;
+
 /** Escape a string for safe interpolation into HomeMatic Script double-quoted strings. */
 export function escapeHmScript(input: string): string {
   return input
@@ -17,12 +23,6 @@ export function toolResult(data: unknown) {
 export function tryParseJson(text: string): unknown {
   try { return JSON.parse(text); } catch { return text; }
 }
-
-import { createRequire } from "node:module";
-const _require = createRequire(import.meta.url);
-
-/** Server version — read from package.json at runtime, single source of truth. */
-export const VERSION: string = (_require("../package.json") as { version: string }).version;
 
 /**
  * Parse a CCU string value to a native JS type.

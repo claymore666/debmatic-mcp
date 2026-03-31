@@ -25,6 +25,10 @@ services:
       # - CACHE_DIR=/data
       # - CACHE_TTL=86400
 
+      # === Timeouts (optional, milliseconds) ===
+      # - CCU_TIMEOUT=10000
+      # - CCU_SCRIPT_TIMEOUT=30000
+
       # === Rate limiting (optional) ===
       # - CCU_RATE_LIMIT_BURST=20
       # - CCU_RATE_LIMIT_RATE=10

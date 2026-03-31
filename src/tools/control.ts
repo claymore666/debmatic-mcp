@@ -3,7 +3,7 @@ import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import type { ServerDeps } from "../server.js";
 import { CcuError } from "../middleware/error-mapper.js";
 import { withRetry } from "../middleware/retry.js";
-import { toolResult, parseValue } from "../utils.js";
+import { toolResult, parseValue, escapeHmScript } from "../utils.js";
 
 export function registerControlTools(server: McpServer, deps: ServerDeps): void {
   registerSetValue(server, deps);
@@ -185,8 +185,8 @@ function registerSetSystemVariable(server: McpServer, deps: ServerDeps): void {
           } else if (varType.includes("STRING")) {
             // String variables: use ReGa.runScript as there's no SysVar.setString API
             await rateLimiter.acquire();
-            const escapedName = String(args.name).replace(/"/g, '\\"');
-            const escapedValue = String(args.value).replace(/"/g, '\\"');
+            const escapedName = escapeHmScript(String(args.name));
+            const escapedValue = escapeHmScript(String(args.value));
             await withRetry(
               () => session.call("ReGa.runScript", {
                 script: `var sv = dom.GetObject("${escapedName}"); if (sv) { sv.State("${escapedValue}"); }`,

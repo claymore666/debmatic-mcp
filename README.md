@@ -149,6 +149,8 @@ All configuration is via environment variables:
 | `CCU_USER` | `Admin` | CCU username |
 | `CCU_PORT` | `80` | API port (`443` when using HTTPS) |
 | `CCU_HTTPS` | `false` | Connect via HTTPS (self-signed certs supported) |
+| `CCU_TIMEOUT` | `10000` | CCU request timeout in milliseconds |
+| `CCU_SCRIPT_TIMEOUT` | `30000` | HM Script execution timeout in milliseconds |
 | `LOG_LEVEL` | `info` | `error`, `warn`, `info`, or `debug` |
 | `CACHE_DIR` | `/data` | Where to store device type cache and session |
 | `CACHE_TTL` | `86400` | Cache lifetime in seconds (24h) |
